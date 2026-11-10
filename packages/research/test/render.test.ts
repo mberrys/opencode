@@ -149,6 +149,23 @@ describe("rendering a cited answer", () => {
     )
   })
 
+  test("an author with no given name leaves no dangling comma", () => {
+    expect(reference({ title: "Employment Outlook", author: [{ family: "OECD" }], issued: { "date-parts": [[2020]] } })).toBe(
+      "OECD (2020). Employment Outlook.",
+    )
+  })
+
+  test("two works by one author in one year get different keys", () => {
+    const work = (number: number, title: string) => ({
+      number,
+      source: { kind: "source" as const, id: `sha256:${String(number).repeat(64)}` as Digest },
+      csl: { title, author: [{ family: "Western", given: "Bruce" }], issued: { "date-parts": [[2011]] } },
+    })
+    const bib = bibliography([work(1, "First"), work(2, "Second")])
+    expect(bib).toContain("@article{western2011,")
+    expect(bib).toContain("@article{western2011-2,")
+  })
+
   test("the bibliography and the ris use the same fields", () => {
     const citations = [
       {

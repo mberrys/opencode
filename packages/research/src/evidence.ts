@@ -190,14 +190,15 @@ export function gap(ctx: Session, input: GapInput): { receipt: Ref } {
   if (input.searched.length === 0) throw new Error("a gap states what was searched, where, and when")
   if (!input.howToClose.trim()) throw new Error("a gap states how to close it")
   const at = new Date().toISOString()
+  const run = runOf(ctx)
   const receipt = makeRecord({
     kind: "receipt",
     at,
     author: { voice: "program" },
     session: ctx.session,
     body: {
-      run: runOf(ctx),
-      seq: nextSeq(ctx),
+      run,
+      seq: nextSeq(ctx.store, run),
       operation: { kind: "tool", tool: "evidence.gap", input: input as unknown as Json },
       inputs: [],
       output: digest(input as unknown as Json),
@@ -230,6 +231,7 @@ export interface DecisionResult {
 export function decide(ctx: Session, input: { target: string; ruling: "adopt" | "reject"; reason?: string }): DecisionResult {
   if (ctx.actor.voice !== "researcher") throw new Error("adopting and rejecting belong to the researcher")
   const target = ctx.store.resolve(input.target)
+  if (target.kind !== "claim") throw new Error(`${formatRef(target)} is not a claim; only a claim is adopted or rejected`)
   const at = new Date().toISOString()
   const decision = makeRecord({
     kind: "decision",
@@ -261,7 +263,7 @@ export function check(ctx: Session, run = ctx.run): VerifyResult {
     session: ctx.session,
     body: {
       run,
-      seq: nextSeq(ctx),
+      seq: nextSeq(ctx.store, run),
       operation: { kind: "tool", tool: "evidence.verify", input: { run } as Json },
       inputs: [],
       output: digest({
@@ -284,8 +286,9 @@ export function claimsOf(store: Store, run: string): ClaimRecord[] {
   return store.kind("claim").filter((item) => item.body.run === run)
 }
 
-export function nextSeq(ctx: Session): number {
-  return ctx.store.kind("receipt").filter((receipt) => receipt.body.run === ctx.run).length + 1
+/** Counted in the run the receipt is written to, so each run's receipts number 1, 2, 3 with no gap or repeat. */
+export function nextSeq(store: Store, run: string): number {
+  return store.kind("receipt").filter((receipt) => receipt.body.run === run).length + 1
 }
 
 export function record<T>(ctx: Session, tool: string, input: Json, records: readonly ResearchRecord[], build: () => T): T {
@@ -294,14 +297,16 @@ export function record<T>(ctx: Session, tool: string, input: Json, records: read
   if (records.length > 0) ctx.store.commit(records, { at: startedAt })
   const result = build()
   const endedAt = new Date().toISOString()
+  // Resolved after the records land: a protocol written just above starts the run this receipt belongs to.
+  const run = runOf(ctx)
   const receipt = makeRecord({
     kind: "receipt",
     at: endedAt,
     author: { voice: "program" },
     session: ctx.session,
     body: {
-      run: runOf(ctx),
-      seq: nextSeq(ctx),
+      run,
+      seq: nextSeq(ctx.store, run),
       operation: { kind: "tool", tool, input },
       inputs: [],
       output: digest(result as Json),

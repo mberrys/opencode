@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
-import { refOf } from "@opencode/research-record"
+import { makeRecord, refOf } from "@opencode/research-record"
 import { claim, decide, gap, quote, record } from "../src/evidence.js"
+import { budgetsFor } from "../src/loop.js"
 import { verify } from "@opencode/research-store"
 import { project } from "./fixture.js"
 
@@ -109,5 +110,38 @@ describe("evidence verbs", () => {
       "evidence.quote",
       "library.grep",
     ])
+  })
+
+  test("a receipt is numbered in the run it is written to", async () => {
+    const { session, address } = await project()
+    quote(session, { address })
+    // The protocol starts a new run for this session while the session object still names the old one.
+    const protocol = makeRecord({
+      kind: "protocol",
+      at: "2026-11-10T00:00:01.000Z",
+      author: session.actor,
+      session: session.session,
+      body: {
+        question: "What explains the rise?",
+        scope: { in: [], out: [] },
+        subquestions: [],
+        effort: "fast",
+        budgets: budgetsFor("fast"),
+        run: "run_2",
+      },
+    })
+    record(session, "research.protocol", { question: "What explains the rise?" }, [protocol], () => ({ run: "run_2" }))
+    quote(session, { address })
+    const receipts = session.store.kind("receipt").filter((item) => item.body.run === "run_2")
+    expect(receipts.map((item) => item.body.seq)).toEqual([1, 2])
+  })
+
+  test("only a claim is adopted or rejected", async () => {
+    const { session, address } = await project()
+    const cut = quote(session, { address })
+    const researcher = { ...session, actor: { voice: "researcher" as const, id: "micha" } }
+    expect(() => decide(researcher, { target: `fragment:${cut.fragment.id}`, ruling: "adopt" })).toThrow(
+      "is not a claim",
+    )
   })
 })

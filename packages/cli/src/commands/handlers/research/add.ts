@@ -1,4 +1,6 @@
+import { resolve } from "node:path"
 import { Effect, Option } from "effect"
+import { SOURCE_TYPES } from "@opencode/research-record"
 import { addSource } from "@opencode/research-library"
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
@@ -11,7 +13,11 @@ export default Runtime.handler(
     const target = input.target
     const doi = /^10\.[0-9]{4,9}\/\S+$/.test(target) ? target : undefined
     const url = /^https?:\/\//i.test(target) ? target : undefined
-    const file = !doi && !url ? (target.startsWith("/") || /^[A-Za-z]:[\\/]/.test(target) ? target : `${directory}/${target}`) : undefined
+    const file = !doi && !url ? resolve(directory, target) : undefined
+    const requested = Option.getOrUndefined(input.type)
+    const type = SOURCE_TYPES.find((item) => item === requested)
+    if (requested !== undefined && !type)
+      return yield* Effect.fail(new Error(`--type must be one of ${SOURCE_TYPES.join(", ")}`))
     const added = yield* Effect.tryPromise({
       try: () =>
         addSource(store, {
@@ -19,6 +25,7 @@ export default Runtime.handler(
           ...(url ? { url } : {}),
           ...(file ? { file } : {}),
           ...(Option.isSome(input.title) ? { title: input.title.value } : {}),
+          ...(type ? { type } : {}),
         }),
       catch: (error) => new Error((error as Error).message),
     })

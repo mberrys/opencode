@@ -173,12 +173,15 @@ function sourceOf(store: Store, fragment: Ref): { ref: Ref; csl: Csl } | undefin
 
 export function reference(csl: Csl): string {
   const authors = csl.author ?? csl.editor ?? []
+  // An author with no given name is the family name alone, with no comma left dangling before the year.
+  const name = (author: { family: string; given?: string }) =>
+    author.given ? `${author.family}, ${initials(author.given)}` : author.family
   const names =
     authors.length === 0
       ? "Anonymous"
       : authors.length === 1
-        ? `${authors[0]!.family}, ${initials(authors[0]!.given)}`
-        : `${authors.slice(0, -1).map((author) => `${author.family}, ${initials(author.given)}`).join(", ")}, & ${authors.at(-1)!.family}, ${initials(authors.at(-1)!.given)}`
+        ? name(authors[0]!)
+        : `${authors.slice(0, -1).map(name).join(", ")}, & ${name(authors.at(-1)!)}`
   const year = csl.issued?.["date-parts"]?.[0]?.[0] ?? "n.d."
   const container = csl.container ? ` *${csl.container}*` : csl.publisher ? ` ${csl.publisher}.` : ""
   const link = csl.DOI ? ` https://doi.org/${csl.DOI}` : csl.URL ? ` ${csl.URL}` : ""
@@ -194,11 +197,16 @@ function initials(given: string | undefined): string {
 }
 
 export function bibliography(citations: readonly Citation[]): string {
+  const used = new Map<string, number>()
   return citations
     .slice()
     .sort((a, b) => a.number - b.number)
     .map((citation) => {
-      const key = `${(citation.csl.author?.[0]?.family ?? "anon").toLowerCase().replace(/[^a-z]/g, "")}${citation.csl.issued?.["date-parts"]?.[0]?.[0] ?? "nd"}`
+      const base = `${(citation.csl.author?.[0]?.family ?? "anon").toLowerCase().replace(/[^a-z]/g, "")}${citation.csl.issued?.["date-parts"]?.[0]?.[0] ?? "nd"}`
+      // Two works by one author in one year need different keys, or BibTeX keeps only one of them.
+      const seen = used.get(base) ?? 0
+      used.set(base, seen + 1)
+      const key = seen === 0 ? base : `${base}-${seen + 1}`
       const authors = (citation.csl.author ?? []).map((author) => `${author.family}, ${author.given ?? ""}`).join(" and ")
       const fields = [
         `  author = {${authors}}`,

@@ -1,3 +1,4 @@
+import { resolve } from "node:path"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { Tool } from "@opencode/schema/tool"
 import { Effect, Schema } from "effect"
@@ -24,7 +25,7 @@ export interface Workspace {
 
 const ErrorText = (error: unknown) => new Tool.Error({ message: error instanceof Error ? error.message : String(error) })
 
-export function installTools(ctx: Pick<Context, "tool" | "permission">, open: () => Store) {
+export function installTools(ctx: Pick<Context, "tool" | "permission" | "location">, open: () => Store) {
   const workspace = (tool: Tool.Context): Workspace => {
     const store = open()
     return {
@@ -101,12 +102,14 @@ export function installTools(ctx: Pick<Context, "tool" | "permission">, open: ()
       execute: (input, tool) =>
         Effect.gen(function* () {
           // Reading a file or fetching a URL outside the permission system would bypass the session's rules.
-          if (input.file)
+          // A relative path names a file in the project, not in whatever directory the server was started from.
+          const file = input.file ? resolve(ctx.location.directory, input.file) : undefined
+          if (file)
             yield* ctx.permission.assert({
               sessionID: tool.sessionID,
               agent: tool.agent,
               action: "read",
-              resources: [input.file],
+              resources: [file],
               save: ["*"],
             })
           if (input.url)
@@ -119,7 +122,7 @@ export function installTools(ctx: Pick<Context, "tool" | "permission">, open: ()
             })
           const ws = workspace(tool)
           const added = yield* Effect.tryPromise({
-            try: () => addSource(ws.store, input),
+            try: () => addSource(ws.store, { ...input, ...(file ? { file } : {}) }),
             catch: ErrorText,
           })
           record(ws, "library.add", input as Json, [], () => added)

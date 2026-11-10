@@ -22,13 +22,34 @@ export default Runtime.handler(
     }
 
     const execute = (tool: string, value: Json) => {
-      const input = value as { pattern: string; query: string; source?: { kind: "source"; id: `sha256:${string}` }; address?: string }
+      // A receipt holds the tool's own input: the source is the string the agent typed, and the limit it asked
+      // for shapes the output, so both are resolved and passed exactly as the tool did.
+      const input = value as {
+        pattern?: string
+        query?: string
+        source?: string
+        address?: string
+        section?: number
+        limit?: number
+      }
       try {
-        if (tool === "library.grep") return grep(store, { pattern: input.pattern, ...(input.source ? { source: input.source } : {}) }) as unknown as Json
-        if (tool === "library.search") return search(store, { query: input.query, ...(input.source ? { source: input.source } : {}) }) as unknown as Json
-        if (tool === "library.read") return read(store, input) as unknown as Json
-        if (tool === "library.outline" && input.source) return outline(store, input.source) as unknown as Json
-        if (tool === "library.cites" && input.source) return cites(store, input.source) as unknown as Json
+        const ref = input.source ? store.resolve(input.source) : undefined
+        if (ref && ref.kind !== "source") return undefined
+        const source = ref ? { source: ref } : {}
+        const limit = input.limit === undefined ? {} : { limit: input.limit }
+        if (tool === "library.grep" && input.pattern !== undefined)
+          return grep(store, { pattern: input.pattern, ...source, ...limit }) as unknown as Json
+        if (tool === "library.search" && input.query !== undefined)
+          return search(store, { query: input.query, ...source, ...limit }) as unknown as Json
+        if (tool === "library.read")
+          return read(store, {
+            ...source,
+            ...(input.address ? { address: input.address } : {}),
+            ...(input.section === undefined ? {} : { section: input.section }),
+            ...limit,
+          }) as unknown as Json
+        if (tool === "library.outline" && ref) return outline(store, ref) as unknown as Json
+        if (tool === "library.cites" && ref) return cites(store, ref) as unknown as Json
       } catch {
         return undefined
       }

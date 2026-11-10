@@ -29,8 +29,17 @@ You are given claim refs. Write sentences that each rest on one claim, in the or
 
 Compose the answer with research.answer, listing each sentence and the claim it rests on. Do not add citations in text; the program numbers them.`
 
+// The agents are allowed their own tools and what library.add asserts, by name. Shell, edit and write stay
+// under the session's rules, because a reader acts on text fetched from the web.
 const allow = [
-  { action: "*", resource: "*", effect: "allow" as const },
+  { action: "library", resource: "*", effect: "allow" as const },
+  { action: "evidence", resource: "*", effect: "allow" as const },
+  { action: "research", resource: "*", effect: "allow" as const },
+  { action: "webfetch", resource: "*", effect: "allow" as const },
+  { action: "read", resource: "*", effect: "allow" as const },
+  { action: "read", resource: "*.env", effect: "ask" as const },
+  { action: "read", resource: "*.env.*", effect: "ask" as const },
+  { action: "read", resource: "*.env.example", effect: "allow" as const },
   { action: "question", resource: "*", effect: "allow" as const },
 ]
 
@@ -40,7 +49,7 @@ export function installAgents(editor: AgentEditor): void {
     agent.description = "Plans a research question, runs readers over the library, checks gaps and renders a cited answer."
     agent.mode = "primary"
     agent.system = RESEARCH
-    agent.permissions.push(...allow)
+    agent.permissions.push(...allow, { action: "subagent", resource: "*", effect: "allow" })
   })
   editor.update(Agent.ID.make("reader"), (agent) => {
     agent.name = Agent.Name.make("Reader")
