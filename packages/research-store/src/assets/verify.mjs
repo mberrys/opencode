@@ -50,7 +50,13 @@ function blob(digest) {
 
 function text(digest) {
   const bytes = blob(digest)
-  return bytes === undefined ? undefined : new TextDecoder("utf-8", { fatal: true }).decode(bytes)
+  if (bytes === undefined) return undefined
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes)
+  } catch (error) {
+    fail("blob", short(digest), "the file is not UTF-8 text")
+    return undefined
+  }
 }
 
 const records = []
@@ -71,13 +77,26 @@ else {
       fail("log.chain", "commit " + (index + 1), "unreadable commit")
       return
     }
+    // A line that is not a commit is reported, not allowed to stop the checks that follow it.
+    const wellFormed =
+      row !== null &&
+      typeof row === "object" &&
+      typeof row.seq === "number" &&
+      typeof row.at === "string" &&
+      (row.prev === null || typeof row.prev === "string") &&
+      Array.isArray(row.records) &&
+      row.records.every((record) => record !== null && typeof record === "object" && record.body !== null && typeof record.body === "object")
+    if (!wellFormed) {
+      fail("log.chain", "commit " + (index + 1), "the line is not a commit")
+      return
+    }
     if (row.seq !== index + 1) fail("log.seq", "commit " + row.seq, "expected sequence " + (index + 1))
     const body = { seq: row.seq, at: row.at, prev: row.prev, records: row.records }
     if (row.prev !== previous)
       fail("log.chain", "commit " + row.seq, "prev is " + String(row.prev) + ", not " + String(previous))
     if (digestOf(body) !== row.digest) fail("log.chain", "commit " + row.seq, "the commit does not hash to its digest")
     previous = row.digest
-    for (const record of row.records ?? []) records.push(record)
+    for (const record of row.records) records.push(record)
   })
 }
 
