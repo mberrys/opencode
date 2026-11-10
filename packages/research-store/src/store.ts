@@ -104,11 +104,11 @@ export class Store {
     if (records.length === 0) throw new Error("a commit needs at least one record")
     for (const record of records) assertRecord(record)
     const at = options.at ?? new Date().toISOString()
-    // BEGIN IMMEDIATE takes the write lock up front, so a second writer waits out busy_timeout instead of
-    // failing the moment a deferred transaction tries to upgrade its read snapshot.
-    this.database.run("BEGIN IMMEDIATE")
-    const commit = ((): CommitResult => {
-      try {
+    // An immediate transaction takes the write lock up front, so a second writer waits out busy_timeout instead
+    // of failing the moment a deferred transaction tries to upgrade its read snapshot. The transaction wrapper
+    // also rolls back when the COMMIT itself fails, so the connection is never left inside a transaction.
+    return this.database
+      .transaction((): CommitResult => {
         const previous = this.head()
         const seq = previous ? previous.seq + 1 : 1
         const body: CommitBody = { seq, at, prev: previous?.digest ?? null, records }
@@ -129,13 +129,8 @@ export class Store {
           .query("INSERT INTO commit_log (seq, at, prev, digest, body) VALUES (?, ?, ?, ?, ?)")
           .run(seq, at, body.prev, commitDigest, canonical(body as never))
         return { seq, digest: commitDigest, ids }
-      } catch (error) {
-        this.database.run("ROLLBACK")
-        throw error
-      }
-    })()
-    this.database.run("COMMIT")
-    return commit
+      })
+      .immediate()
   }
 
   commits(): CommitRow[] {
@@ -144,7 +139,7 @@ export class Store {
 
   /** Every record, in commit order. */
   all(): Record[] {
-    const rows = this.database.query("SELECT body FROM record").all() as { body: string }[]
+    const rows = this.database.query("SELECT body FROM record ORDER BY rowid").all() as { body: string }[]
     return rows.map((row) => parse(row.body))
   }
 

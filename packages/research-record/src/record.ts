@@ -447,7 +447,7 @@ function assertArtifact(body: { [key: string]: unknown }): void {
   }
   if (body.type === "model-call") {
     check(body.model, "string", "artifact.model")
-    check(body.contents, "strings", "artifact.contents")
+    check(body.contents, "digests", "artifact.contents")
     check(body.response, "digest", "artifact.response")
     return
   }
@@ -481,6 +481,7 @@ type FieldType =
   | "ref"
   | "refs"
   | "strings"
+  | "digests"
   | "object"
   | "json"
   | "json-array"
@@ -532,7 +533,7 @@ const FIELDS: Readonly<{ [K in Kind]: Readonly<{ [key: string]: FieldType }> }> 
     run: "string",
     seq: "number",
     operation: "object",
-    inputs: "strings",
+    inputs: "digests",
     output: "digest",
     records: "refs",
     startedAt: "string",
@@ -589,6 +590,10 @@ function check(value: unknown, type: FieldType, where: string): void {
     case "strings":
       if (!Array.isArray(value) || value.some((item) => typeof item !== "string"))
         throw new Error(`${where} must be a list of strings`)
+      return
+    case "digests":
+      // These name blob files, so anything but a digest could point outside the blob directory.
+      if (!Array.isArray(value) || !value.every(isDigest)) throw new Error(`${where} must be a list of digests`)
       return
     case "json":
       requireObject(value, where)
