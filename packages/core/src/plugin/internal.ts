@@ -99,6 +99,7 @@ import { WellKnown } from "../wellknown.js"
 import { WriteTool } from "../tool/plugin/write.js"
 import { AgentPlugin } from "./agent.js"
 import BrowserPlugin from "@opencode/plugin-browser"
+import ResearchPlugin from "@opencode/research/plugin"
 import { CommandPlugin } from "./command.js"
 import { IdentityPlugin } from "./identity.js"
 import { PlanPlugin } from "./plan.js"
@@ -241,6 +242,17 @@ export const requirements = LayerNode.group([
 
 export type InternalPlugin = Plugin<Requirements | Scope.Scope>
 
+// The research harness ships behind one flag: on in local and dev builds, off in releases.
+const Research = {
+  id: ResearchPlugin.id,
+  effect: (host: unknown) =>
+    Effect.gen(function* () {
+      const flags = yield* Flag.Service
+      if (!(yield* flags.enabled("research"))) return
+      yield* ResearchPlugin.effect(host as never)
+    }),
+}
+
 const pre = [
   ToolInputRepairPlugin.Plugin,
   ConfigWorktreePlugin.Plugin,
@@ -279,6 +291,8 @@ const pre = [
   WebFetchTool.Plugin,
   WebSearchTool.Plugin,
   WriteTool.Plugin,
+  // Registered in pre so ConfigAgentPlugin, which runs in post, sees the three research agents.
+  Research,
   WarmingPlugin.Plugin,
 ] as const satisfies readonly InternalPlugin[]
 
