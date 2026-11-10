@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@opencode/research-record",
+  "version": "2.2.5",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./digest": "./src/digest.ts",
+    "./record": "./src/record.ts",
+    "./fragment": "./src/fragment.ts",
+    "./tier": "./src/tier.ts",
+    "./shown": "./src/shown.ts"
+  },
+  "scripts": {
+    "test": "bun test --timeout 30000 --only-failures",
+    "typecheck": "bun check --no-script",
+    "typecheck:tsc": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@tsconfig/bun": "catalog:",
+    "@types/bun": "catalog:",
+    "@typescript/native": "catalog:"
+  }
+}
