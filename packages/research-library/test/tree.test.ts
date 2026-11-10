@@ -6,7 +6,7 @@ const encoder = new TextEncoder()
 describe("the structure tree", () => {
   test("every node span is the node's own bytes in the text", () => {
     const { text, tree } = buildTree([
-      { kind: "paragraph", text: "Intro one. Intro two." },
+      { kind: "paragraph", text: "Intro one — naïve. Intro two." },
       { kind: "heading", text: "Methods", level: 1 },
       { kind: "paragraph", text: "We sampled forty cases. We counted them." },
     ])
@@ -29,6 +29,8 @@ describe("the structure tree", () => {
       ["paragraph", 1, 1],
       ["sentence", 1, 1],
     ])
+    // The total counts every section, not only the last one.
+    expect(tree.paragraphs).toBe(2)
   })
 
   test("sentences are numbered inside their paragraph and carry the heading path", () => {

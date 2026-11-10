@@ -68,5 +68,6 @@ describe("extraction", () => {
 
   test("entities decode by name and by code point", () => {
     expect(decodeEntities("a &amp; b &#233; &#x1F600; &unknown;")).toBe("a & b é 😀 &unknown;")
+    expect(decodeEntities("&#99999999; &#xD800;")).toBe("&#99999999; &#xD800;")
   })
 })

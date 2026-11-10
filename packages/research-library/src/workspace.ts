@@ -1,5 +1,5 @@
 import type { CopyBody, Digest, Envelope, Ref, RepresentationBody, SourceBody } from "@opencode/research-record"
-import { hex, recordId, refOf, sameRef } from "@opencode/research-record"
+import { hex, recordId } from "@opencode/research-record"
 import type { Store } from "@opencode/research-store"
 import type { Tree } from "./tree.js"
 
@@ -22,47 +22,48 @@ export interface Located {
   readonly tree: Tree
 }
 
-/** Short ids are the shortest unique prefix of a source id, so every address reads the same to a person. */
+/**
+ * A short id is the shortest prefix of a source id that no earlier source took. Ids are taken in the order the
+ * sources were added, so a later source never changes an address that has already been written into a record.
+ */
 export function assignShorts(ids: readonly Digest[]): Map<Digest, string> {
-  const unique = [...new Set(ids)].sort()
   const result = new Map<Digest, string>()
-  for (let length = 4; length <= 16 && result.size < unique.length; length++) {
-    const remaining = unique.filter((id) => !result.has(id))
-    const counts = new Map<string, number>()
-    for (const id of remaining) {
-      const prefix = hex(id).slice(0, length)
-      counts.set(prefix, (counts.get(prefix) ?? 0) + 1)
-    }
-    for (const id of remaining) {
-      const prefix = hex(id).slice(0, length)
-      if ((counts.get(prefix) ?? 0) === 1) result.set(id, prefix)
-    }
+  const taken = new Set<string>()
+  for (const id of ids) {
+    if (result.has(id)) continue
+    const full = hex(id)
+    let length = 4
+    while (length < full.length && taken.has(full.slice(0, length))) length++
+    taken.add(full.slice(0, length))
+    result.set(id, full.slice(0, length))
   }
-  for (const id of unique) if (!result.has(id)) result.set(id, hex(id).slice(0, 16))
   return result
 }
 
 export function entries(store: Store): Entry[] {
   const sources = store.kind("source")
-  const copies = store.kind("copy")
-  const representations = store.kind("representation")
-  const shorts = assignShorts(sources.map((source) => recordId(source)))
+  const ids = sources.map((source) => recordId(source))
+  const shorts = assignShorts(ids)
+  // Grouped once by source id, so listing the library hashes each record a single time.
+  const copies = new Map<Digest, CopyRecord[]>()
   const copySource = new Map<Digest, Digest>()
-  for (const copy of copies) copySource.set(recordId(copy), copy.body.source.id)
-  const representationSource = new Map<Digest, Digest>()
-  for (const representation of representations) {
-    const source = copySource.get(representation.body.copy.id)
-    if (source) representationSource.set(recordId(representation), source)
+  for (const copy of store.kind("copy")) {
+    copySource.set(recordId(copy), copy.body.source.id)
+    if (copy.body.source.kind !== "source") continue
+    copies.set(copy.body.source.id, [...(copies.get(copy.body.source.id) ?? []), copy])
   }
-  return sources.map((source) => {
-    const id = recordId(source)
+  const representations = new Map<Digest, RepresentationRecord[]>()
+  for (const representation of store.kind("representation")) {
+    const source = copySource.get(representation.body.copy.id)
+    if (source) representations.set(source, [...(representations.get(source) ?? []), representation])
+  }
+  return sources.map((source, index) => {
+    const id = ids[index]!
     return {
       source,
       short: shorts.get(id) ?? hex(id).slice(0, 4),
-      copies: copies.filter((copy) => sameRef(copy.body.source, { kind: "source", id })),
-      representations: representations.filter(
-        (representation) => representationSource.get(recordId(representation)) === id,
-      ),
+      copies: copies.get(id) ?? [],
+      representations: representations.get(id) ?? [],
     }
   })
 }
@@ -79,13 +80,12 @@ export function entryOfShort(store: Store, short: string): Entry | undefined {
 /** The representation a source is read in: the most recently added one. */
 export function latest(store: Store, source: Ref): Located | undefined {
   const entry = entryOf(store, source)
-  const representation = entry?.representations.at(-1)
-  if (!entry || !representation) return undefined
-  return locate(store, entry, representation)
+  return entry ? latestOfEntry(store, entry) : undefined
 }
 
 export function latestOfEntry(store: Store, entry: Entry): Located | undefined {
-  return latest(store, refOf(entry.source))
+  const representation = entry.representations.at(-1)
+  return representation ? locate(store, entry, representation) : undefined
 }
 
 export function representationOf(store: Store, ref: Ref): Located | undefined {

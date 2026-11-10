@@ -56,7 +56,7 @@ export async function addSource(store: Store, input: AddInput, options: AddOptio
   const draft = input.file
     ? await fromFile(input, options)
     : input.url
-      ? await fromUrl(input, options)
+      ? await fromUrl(input, options, at)
       : input.doi
         ? await fromDoi(input, options)
         : undefined
@@ -95,7 +95,7 @@ async function fromFile(input: AddInput, options: AddOptions): Promise<Draft> {
   }
 }
 
-async function fromUrl(input: AddInput, options: AddOptions): Promise<Draft> {
+async function fromUrl(input: AddInput, options: AddOptions, at: string): Promise<Draft> {
   const url = input.url!
   const response = await (options.fetch ?? fetch)(url, {
     signal: AbortSignal.timeout(20000),
@@ -105,7 +105,6 @@ async function fromUrl(input: AddInput, options: AddOptions): Promise<Draft> {
   const bytes = new Uint8Array(await response.arrayBuffer())
   const header = (response.headers.get("content-type") ?? "").split(";")[0]!.trim().toLowerCase()
   const mime = header === "application/pdf" ? PDF_MIME : header === "text/html" || header === "application/xhtml+xml" ? HTML_MIME : header === "text/markdown" ? MARKDOWN_MIME : TEXT_MIME
-  const at = new Date().toISOString()
   const page = mime === HTML_MIME ? cslOfPage(pageMetadata(new TextDecoder().decode(bytes), url), url, at) : undefined
   const csl: Csl = page?.csl ?? { title: input.title ?? url, URL: url, accessed: { "date-parts": [[new Date(at).getUTCFullYear(), new Date(at).getUTCMonth() + 1, new Date(at).getUTCDate()]] } }
   return {

@@ -36,14 +36,21 @@ export function buildTree(blocks: readonly Block[]): Extracted {
   const path: string[] = []
   let section = 0
   let paragraph = 0
+  let paragraphs = 0
   let sentences = 0
+  // Byte length of `text` so far, kept as a running total so each block is encoded once.
+  let bytes = 0
   let inReferences = false
 
   for (const block of blocks) {
-    if (text.length > 0) text += "\n\n"
-    const start = encoder.encode(text).length
+    if (text.length > 0) {
+      text += "\n\n"
+      bytes += 2
+    }
+    const start = bytes
     text += block.text
-    const end = encoder.encode(text).length
+    bytes += encoder.encode(block.text).length
+    const end = bytes
 
     if (block.kind === "heading") {
       section += 1
@@ -64,6 +71,7 @@ export function buildTree(blocks: readonly Block[]): Extracted {
     }
 
     paragraph += 1
+    paragraphs += 1
     const heading = path.filter(Boolean)
     nodes.push({ kind: inReferences ? "reference" : block.kind, text: block.text, start, end, section, paragraph, heading })
 
@@ -95,7 +103,7 @@ export function buildTree(blocks: readonly Block[]): Extracted {
     tree: {
       nodes,
       sections: section || (blocks.length > 0 ? 1 : 0),
-      paragraphs: paragraph,
+      paragraphs,
       sentences,
       characters: text.length,
     },
