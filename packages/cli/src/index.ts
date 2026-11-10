@@ -61,6 +61,16 @@ const Handlers = Runtime.handlers(Commands, {
     "heap-dump": () => import("./commands/handlers/debug/heap-dump"),
     paths: () => import("./commands/handlers/debug/paths"),
   },
+  research: {
+    add: () => import("./commands/handlers/research/add"),
+    show: () => import("./commands/handlers/research/show"),
+    verify: () => import("./commands/handlers/research/verify"),
+    replay: () => import("./commands/handlers/research/replay"),
+    adopt: () => import("./commands/handlers/research/adopt"),
+    reject: () => import("./commands/handlers/research/reject"),
+    export: () => import("./commands/handlers/research/export"),
+    run: () => import("./commands/handlers/research/run"),
+  },
   mcp: {
     list: () => import("./commands/handlers/mcp/list"),
     add: () => import("./commands/handlers/mcp/add"),

@@ -27,6 +27,11 @@ export const Server = GlobalFlag.Setting("server")({
 
 const ServerFlags = [Standalone, Server] as const
 
+const DirectoryFlag = Flag.String("directory").pipe(
+  Flag.withDescription("Project directory, defaults to the current one"),
+  Flag.optional,
+)
+
 declare const OPENCODE_CLI_NAME: string | undefined
 
 const ServerParams = {
@@ -157,6 +162,75 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
                 "Print only one path: db, home, data, config, cache, state, tmp, bin, log, repos",
               ),
               Argument.optional,
+            ),
+          },
+        }),
+      ],
+    }),
+    Spec.make("research", {
+      description: "Research with a record that verifies: every claim resolves to stored bytes",
+      commands: [
+        Spec.make("add", {
+          description: "Store a DOI, URL or file, copy its bytes and extract its text",
+          params: {
+            directory: DirectoryFlag,
+            target: Argument.String("target").pipe(
+              Argument.withDescription("A DOI, an http(s) URL, or a path to a file"),
+            ),
+            title: Flag.String("title").pipe(Flag.withDescription("Title to use instead of the one found"), Flag.optional),
+            type: Flag.String("type").pipe(Flag.withDescription("Source type, such as report or book"), Flag.optional),
+          },
+        }),
+        Spec.make("show", {
+          description: "Print one record, a card, or a source",
+          params: {
+            ref: Argument.String("ref").pipe(Argument.withDescription("A ref such as claim:sha256:...")),
+            directory: DirectoryFlag,
+          },
+        }),
+        Spec.make("verify", {
+          description: "Check the chain, every stored file, every quote, every citation and the shown set",
+          params: { directory: DirectoryFlag },
+        }),
+        Spec.make("replay", {
+          description: "Replay a run from its receipts with no model and no network",
+          params: {
+            directory: DirectoryFlag,
+            run: Argument.String("run").pipe(Argument.withDescription("Run id, or every run when omitted"), Argument.optional),
+          },
+        }),
+        Spec.make("adopt", {
+          description: "Adopt a claim as the researcher",
+          params: {
+            directory: DirectoryFlag,
+            ref: Argument.String("ref"),
+            reason: Flag.String("reason").pipe(Flag.withDescription("Why the claim was adopted"), Flag.optional),
+          },
+        }),
+        Spec.make("reject", {
+          description: "Reject a claim as the researcher",
+          params: {
+            directory: DirectoryFlag,
+            ref: Argument.String("ref"),
+            reason: Flag.String("reason").pipe(Flag.withDescription("Why the claim was rejected"), Flag.optional),
+          },
+        }),
+        Spec.make("export", {
+          description: "Write the record bundle, the answer and the references",
+          params: {
+            directory: DirectoryFlag,
+            run: Argument.String("run").pipe(Argument.withDescription("Run id, or every run when omitted"), Argument.optional),
+            out: Flag.String("out").pipe(Flag.withDescription("Directory to write into"), Flag.optional),
+          },
+        }),
+        Spec.make("run", {
+          description: "Run the research agent on a question",
+          globalFlags: ServerFlags,
+          params: {
+            directory: DirectoryFlag,
+            question: Argument.String("question").pipe(
+              Argument.withDescription("The research question"),
+              Argument.variadic({ min: 0 }),
             ),
           },
         }),
