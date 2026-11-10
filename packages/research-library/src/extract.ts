@@ -200,7 +200,9 @@ export function decodeEntities(text: string): string {
   return text.replace(/&(#x?[0-9a-fA-F]+|[a-zA-Z]+);/g, (whole, body: string) => {
     if (body.startsWith("#")) {
       const code = body.startsWith("#x") || body.startsWith("#X") ? parseInt(body.slice(2), 16) : parseInt(body.slice(1), 10)
-      return Number.isFinite(code) ? String.fromCodePoint(code) : whole
+      // A reference outside Unicode, or to a surrogate, is left as written rather than thrown on.
+      const scalar = code <= 0x10ffff && (code < 0xd800 || code > 0xdfff)
+      return scalar ? String.fromCodePoint(code) : whole
     }
     return ENTITIES[body.toLowerCase()] ?? whole
   })

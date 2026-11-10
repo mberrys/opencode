@@ -194,7 +194,8 @@ function isoDate(value: string): string | undefined {
 }
 
 function dateParts(value: string): number[] {
-  const [year, month, day] = value.split("-").map((part) => Number(part))
+  // Only the date of an ISO timestamp is read, so a time of day never turns the day into NaN.
+  const [year, month, day] = value.slice(0, 10).split("-").map((part) => Number(part))
   return day ? [year!, month!, day] : [year!]
 }
 

@@ -150,12 +150,16 @@ describe("adding a web page", () => {
   test("a page with no citation tags is a web page with its site as publisher", async () => {
     const { store } = project()
     const plain = "<html><head><title>A note</title></head><body><p>A note.</p></body></html>"
-    const added = await addSource(store, { url: "https://example.org/note" }, { fetch: respond(plain, "text/html") })
+    const added = await addSource(
+      store,
+      { url: "https://example.org/note" },
+      { fetch: respond(plain, "text/html"), now: new Date("2026-03-04T05:06:07Z") },
+    )
     const source = store.get(added.source)
     if (source.kind !== "source") throw new Error("not a source")
     expect(source.body.type).toBe("web-page")
     expect(source.body.csl.publisher).toBe("example.org")
-    expect(source.body.csl.accessed).toBeDefined()
+    expect(source.body.csl.accessed).toEqual({ "date-parts": [[2026, 3, 4]] })
   })
 })
 
@@ -229,6 +233,15 @@ describe("short source ids", () => {
     expect(shorts.get(one)).toBe("aaaa")
     expect(shorts.get(three)).toBe("bbbb")
     expect(shorts.get(two)).toBe("aaab")
+  })
+
+  test("a later source that shares a prefix never changes an earlier short id", () => {
+    const first = `sha256:${"a".repeat(64)}` as const
+    const later = `sha256:${"a".repeat(5)}${"c".repeat(59)}` as const
+    expect(assignShorts([first]).get(first)).toBe("aaaa")
+    const shorts = assignShorts([first, later])
+    expect(shorts.get(first)).toBe("aaaa")
+    expect(shorts.get(later)).toBe("aaaaa")
   })
 
   test("two sources in one library keep separate addresses", async () => {
