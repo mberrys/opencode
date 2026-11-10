@@ -37,5 +37,8 @@ logs/
 tsconfig.tsbuildinfo
 /artifacts/
 
+# A research project's record and library live beside its code, not in it.
+.research/
+
 # Legal drafts pending review are kept outside the repository; never copy them in.
 legal-drafts-private/

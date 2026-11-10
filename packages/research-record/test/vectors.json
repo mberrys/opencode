@@ -1,0 +1,160 @@
+[
+  {
+    "name": "null",
+    "input": null,
+    "canonical": "null",
+    "digest": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+  },
+  {
+    "name": "booleans",
+    "input": [
+      true,
+      false
+    ],
+    "canonical": "[true,false]",
+    "digest": "sha256:153c9dbcc7025ecd7e50ce6d83f1995233dfc636bc869098e3a8d84288fd938a"
+  },
+  {
+    "name": "empty-object",
+    "input": {},
+    "canonical": "{}",
+    "digest": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+  },
+  {
+    "name": "empty-array",
+    "input": [],
+    "canonical": "[]",
+    "digest": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  {
+    "name": "key-order",
+    "input": {
+      "b": 1,
+      "a": 2
+    },
+    "canonical": "{\"a\":2,\"b\":1}",
+    "digest": "sha256:d3626ac30a87e6f7a6428233b3c68299976865fa5508e4267c5415c76af7a772"
+  },
+  {
+    "name": "integer-like-keys",
+    "input": {
+      "2": 2,
+      "10": 1
+    },
+    "canonical": "{\"10\":1,\"2\":2}",
+    "digest": "sha256:4489ac68dd5e0c9eb21f0e6c3294139a7d51b793c0e2e515bdf6c12948537df1"
+  },
+  {
+    "name": "unicode-keys",
+    "input": {
+      "é": 1,
+      "z": 2
+    },
+    "canonical": "{\"z\":2,\"é\":1}",
+    "digest": "sha256:ebf5b3ac2125f90b74510656202151eacb0fa0dcdf14105494181e8969b802d5"
+  },
+  {
+    "name": "astral-keys",
+    "input": {
+      "😀": 1,
+      "�": 2
+    },
+    "canonical": "{\"😀\":1,\"�\":2}",
+    "digest": "sha256:fd8b688bfa8b71822975ab3519e20b09e43b67d382a9f32831bfa384df21a82d"
+  },
+  {
+    "name": "numbers",
+    "input": [
+      0,
+      0,
+      1.5,
+      0.002,
+      1e-7,
+      1e+21,
+      1e+30,
+      333333333.3333333
+    ],
+    "canonical": "[0,0,1.5,0.002,1e-7,1e+21,1e+30,333333333.3333333]",
+    "digest": "sha256:ff382daef8eb46f9f7fb82b10b9eec3e70a823ecb123a7fb23d1ec01d58c6c2f"
+  },
+  {
+    "name": "strings",
+    "input": [
+      "",
+      "a",
+      "é",
+      "😀",
+      "quote\"here",
+      "back\\slash",
+      "line\nbreak",
+      "tab\there",
+      "nul\u0000",
+      "lone\ud800"
+    ],
+    "canonical": "[\"\",\"a\",\"é\",\"😀\",\"quote\\\"here\",\"back\\\\slash\",\"line\\nbreak\",\"tab\\there\",\"nul\\u0000\",\"lone\\ud800\"]",
+    "digest": "sha256:5e4a64beb94f98ecd9ecd165d250a36cb5f27d05b7f157ddedbc4c7057bb0b21"
+  },
+  {
+    "name": "nested",
+    "input": {
+      "numbers": [
+        333333333.3333333,
+        1e+30,
+        4.5,
+        0.002,
+        1e-27
+      ],
+      "string": "€$\u000f\nA'B\"\\\\\"/",
+      "literals": [
+        null,
+        true,
+        false
+      ]
+    },
+    "canonical": "{\"literals\":[null,true,false],\"numbers\":[333333333.3333333,1e+30,4.5,0.002,1e-27],\"string\":\"€$\\u000f\\nA'B\\\"\\\\\\\\\\\"/\"}",
+    "digest": "sha256:2d5e01a318d0f0879ab568c4be289c8b1f64ef8921a53c6277d5e069978baacb"
+  },
+  {
+    "name": "record",
+    "input": {
+      "contract": "research-record@1",
+      "kind": "claim",
+      "object": "sha256:abababababababababababababababababababababababababababababababab",
+      "author": {
+        "voice": "agent",
+        "id": "reader"
+      },
+      "at": "2026-11-10T00:00:00.000Z",
+      "body": {
+        "text": "union decline explains part of the rise",
+        "scope": {
+          "subquestion": "q1"
+        }
+      }
+    },
+    "canonical": "{\"at\":\"2026-11-10T00:00:00.000Z\",\"author\":{\"id\":\"reader\",\"voice\":\"agent\"},\"body\":{\"scope\":{\"subquestion\":\"q1\"},\"text\":\"union decline explains part of the rise\"},\"contract\":\"research-record@1\",\"kind\":\"claim\",\"object\":\"sha256:abababababababababababababababababababababababababababababababab\"}",
+    "digest": "sha256:025e9a10ce9fbf01f6f0da091a7279dba38ed27e80efa13ad0f60d0c44904643"
+  },
+  {
+    "name": "deep",
+    "input": [
+      [
+        [
+          [
+            {
+              "z": [
+                1,
+                2,
+                {
+                  "y": "x"
+                }
+              ]
+            }
+          ]
+        ]
+      ]
+    ],
+    "canonical": "[[[[{\"z\":[1,2,{\"y\":\"x\"}]}]]]]",
+    "digest": "sha256:085d50ee4007dd9b9e0fb7025e3e57d12ef45adba31c60ae42074ed22385408e"
+  }
+]
