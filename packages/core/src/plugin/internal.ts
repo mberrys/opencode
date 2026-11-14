@@ -1,7 +1,7 @@
 export * as PluginInternal from "./internal.js"
 
 import { LLMClient } from "@opencode/ai/effect"
-import type { Plugin } from "@opencode/plugin/effect/plugin"
+import type { Context as PluginContext, Plugin } from "@opencode/plugin/effect/plugin"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import type { Generation } from "./service.js"
 import { httpClient, httpFetch } from "@opencode/util/effect/app-node-platform"
@@ -100,6 +100,7 @@ import { WellKnown } from "../wellknown.js"
 import { WriteTool } from "../tool/plugin/write.js"
 import { AgentPlugin } from "./agent.js"
 import BrowserPlugin from "@opencode/plugin-browser"
+import ResearchPlugin from "@opencode/research"
 import { CommandPlugin } from "./command.js"
 import { IdentityPlugin } from "./identity.js"
 import { ForkNoticePlugin } from "./fork-notice.js"
@@ -244,6 +245,14 @@ export const requirements = LayerNode.group([
 
 export type InternalPlugin = Plugin<Requirements | Scope.Scope>
 
+const Research = {
+  id: ResearchPlugin.id,
+  effect: Effect.fn("ResearchPlugin")(function* (ctx: PluginContext) {
+    if (!(yield* Flag.enabled("research"))) return
+    yield* ResearchPlugin.effect(ctx)
+  }),
+}
+
 const pre = [
   ToolInputRepairPlugin.Plugin,
   ConfigWorktreePlugin.Plugin,
@@ -284,6 +293,7 @@ const pre = [
   WebFetchTool.Plugin,
   WebSearchTool.Plugin,
   WriteTool.Plugin,
+  Research,
   WarmingPlugin.Plugin,
 ] as const satisfies readonly InternalPlugin[]
 

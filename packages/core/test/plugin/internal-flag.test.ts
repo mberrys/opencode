@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, spyOn } from "bun:test"
 import { Duration, Effect, Layer, LayerMap, Stream } from "effect"
 import { App } from "@opencode/core/app"
 import { ConfigPluginSource } from "@opencode/core/config/plugin/source"
@@ -14,6 +14,7 @@ import { TodoTool } from "@opencode/core/tool/plugin/todo"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
 import { Npm } from "@opencode/util/npm"
+import ResearchPlugin from "@opencode/research"
 import { Bus } from "../../src/bus"
 import { Database } from "../../src/database/database"
 import { tempGlobalLayer } from "../fixture/global"
@@ -25,51 +26,67 @@ import { toolDefinitions } from "../lib/tool"
 const unexpected = (pkg: string) =>
   Effect.fail(new Npm.InstallFailedError({ add: [pkg], dir: "", cause: new Error(`Unexpected Npm call: ${pkg}`) }))
 
-const instances = Layer.effect(
-  LocationServiceMap.Service,
-  Effect.gen(function* () {
-    const map = yield* LayerMap.make(
-      (ref: Location.Ref) => Instance.layer(ref, { discovery: false, replacements: bindings }),
-      { idleTimeToLive: Duration.infinity },
-    )
-    const bindings: LayerNode.Replacements = [
-      App.node.replace(App.configured({ channel: "dev" })),
+const instances = (channel: string) =>
+  Layer.effect(
+    LocationServiceMap.Service,
+    Effect.gen(function* () {
+      const map = yield* LayerMap.make(
+        (ref: Location.Ref) => Instance.layer(ref, { discovery: false, replacements: bindings }),
+        { idleTimeToLive: Duration.infinity },
+      )
+      const bindings: LayerNode.Replacements = [
+        App.node.replace(App.configured({ channel })),
+        Global.node.replace(tempGlobalLayer),
+        offlineModels,
+        ConfigPluginSource.node.replace(
+          Layer.succeed(
+            ConfigPluginSource.Service,
+            ConfigPluginSource.Service.of({ operations: () => Effect.succeed([]), changes: () => Stream.never }),
+          ),
+        ),
+        Npm.node.replace(
+          Layer.succeed(
+            Npm.Service,
+            Npm.Service.of({
+              add: unexpected,
+              resolve: (name) => Effect.succeed({ directory: "", name }),
+              check: () => Effect.succeed(false),
+              update: unexpected,
+              which: () => Effect.undefined,
+            }),
+          ),
+        ),
+        LocationServiceMap.node.replace(Layer.succeed(LocationServiceMap.Service, map)),
+        Instance.node.replace(
+          Layer.succeed(Instance.Service, { provide: (session) => Effect.provide(map.get(session.location)) }),
+        ),
+      ]
+      return map
+    }),
+  )
+
+const server = (channel: string) =>
+  testEffect(
+    AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node]), [
       Global.node.replace(tempGlobalLayer),
       offlineModels,
-      ConfigPluginSource.node.replace(
-        Layer.succeed(
-          ConfigPluginSource.Service,
-          ConfigPluginSource.Service.of({ operations: () => Effect.succeed([]), changes: () => Stream.never }),
-        ),
-      ),
-      Npm.node.replace(
-        Layer.succeed(
-          Npm.Service,
-          Npm.Service.of({
-            add: unexpected,
-            resolve: (name) => Effect.succeed({ directory: "", name }),
-            check: () => Effect.succeed(false),
-            update: unexpected,
-            which: () => Effect.undefined,
-          }),
-        ),
-      ),
-      LocationServiceMap.node.replace(Layer.succeed(LocationServiceMap.Service, map)),
-      Instance.node.replace(
-        Layer.succeed(Instance.Service, { provide: (session) => Effect.provide(map.get(session.location)) }),
-      ),
-    ]
-    return map
-  }),
-)
+      LocationServiceMap.node.replace(instances(channel)),
+    ]),
+  )
 
-const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node]), [
-    Global.node.replace(tempGlobalLayer),
-    offlineModels,
-    LocationServiceMap.node.replace(instances),
-  ]),
-)
+const it = server("dev")
+const release = server("latest")
+
+const activate = Effect.gen(function* () {
+  const directory = yield* tmpdirScoped()
+  const locations = yield* LocationServiceMap.Service
+  yield* Effect.gen(function* () {
+    yield* (yield* Plugin.Service).awaitActivation
+  }).pipe(
+    Effect.scoped,
+    Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
+  )
+})
 
 describe("PluginInternal flags", () => {
   it.live("turns a flagged built-in tool on for a dev-channel server with no config", () =>
@@ -85,6 +102,24 @@ describe("PluginInternal flags", () => {
       )
 
       expect(names).toContain(TodoTool.name)
+    }),
+  )
+
+  it.live("loads the research plugin when the research flag is on", () =>
+    Effect.gen(function* () {
+      const load = spyOn(ResearchPlugin, "effect")
+      yield* activate
+      expect(load).toHaveBeenCalledTimes(1)
+      load.mockRestore()
+    }),
+  )
+
+  release.live("leaves the research plugin unloaded when the research flag is off", () =>
+    Effect.gen(function* () {
+      const load = spyOn(ResearchPlugin, "effect")
+      yield* activate
+      expect(load).not.toHaveBeenCalled()
+      load.mockRestore()
     }),
   )
 })
