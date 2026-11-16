@@ -1,0 +1,223 @@
+{
+  "description": "Shared RFC 8785 vectors, ported unchanged from Ivory's @ivory/contracts. The TypeScript and Python implementations must both pass every entry. \"json\" is JSON text each implementation parses with its own parser; \"canonical\" is the expected RFC 8785 output; \"digest\" is SHA-256 over its UTF-8 bytes; \"bits\" is an IEEE 754 double as big-endian hex; \"code\" is the expected refusal.",
+  "valid": [
+    {
+      "name": "empty object",
+      "json": "{}",
+      "canonical": "{}",
+      "digest": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+    },
+    {
+      "name": "empty array",
+      "json": "[]",
+      "canonical": "[]",
+      "digest": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "name": "literals",
+      "json": "[null, true, false]",
+      "canonical": "[null,true,false]",
+      "digest": "sha256:37257214f22b92121c5ff4d7e29ed2d31b3f1129ee698e96e581ec05cb2e3cf7"
+    },
+    {
+      "name": "RFC 8785 section 3.2.4 sample",
+      "json": "{\"numbers\": [333333333.33333329, 1E30, 4.50, 2e-3, 0.000000000000000000000000001], \"string\": \"\\u20ac$\\u000F\\u000aA'\\u0042\\u0022\\u005c\\\\\\\"\\/\", \"literals\": [null, true, false]}",
+      "canonical": "{\"literals\":[null,true,false],\"numbers\":[333333333.3333333,1e+30,4.5,0.002,1e-27],\"string\":\"€$\\u000f\\nA'B\\\"\\\\\\\\\\\"/\"}",
+      "digest": "sha256:2d5e01a318d0f0879ab568c4be289c8b1f64ef8921a53c6277d5e069978baacb"
+    },
+    {
+      "name": "RFC 8785 section 3.2.3 member order (UTF-16 code units)",
+      "json": "{\"\\u20ac\":\"Euro Sign\",\"\\r\":\"Carriage Return\",\"\\ufb33\":\"Hebrew Letter Dalet With Dagesh\",\"1\":\"One\",\"\\ud83d\\ude00\":\"Emoji: Grinning Face\",\"\\u0080\":\"Control\",\"\\u00f6\":\"Latin Small Letter O With Diaeresis\"}",
+      "canonical": "{\"\\r\":\"Carriage Return\",\"1\":\"One\",\"\":\"Control\",\"ö\":\"Latin Small Letter O With Diaeresis\",\"€\":\"Euro Sign\",\"😀\":\"Emoji: Grinning Face\",\"דּ\":\"Hebrew Letter Dalet With Dagesh\"}",
+      "digest": "sha256:5e321556d22018a9656991a9e94f77ec175fa193e52a2429d312f8419ec8b08c"
+    },
+    {
+      "name": "astral key sorts before U+E000 (code-point order would not)",
+      "json": "{\"\\ue000\":1,\"\\ud83d\\ude00\":2,\"a\":3}",
+      "canonical": "{\"a\":3,\"😀\":2,\"\":1}",
+      "digest": "sha256:84495633024b0992798250783e7ccb01ab2875649ab22f353f14c0d6a8389fc2"
+    },
+    {
+      "name": "integer-like member names sort as strings, not numerically",
+      "json": "{\"9\":\"a\",\"10\":\"b\",\"1\":\"c\"}",
+      "canonical": "{\"1\":\"c\",\"10\":\"b\",\"9\":\"a\"}",
+      "digest": "sha256:ce66299e89cc20c30f6d78195330f690a6241f897c79f3b3469c15b1223f573a"
+    },
+    {
+      "name": "escaped and literal characters",
+      "json": "\"\\u0000\\u0007\\b\\t\\n\\u000b\\f\\r\\u001f\\u007f\\u2028\\/\"",
+      "canonical": "\"\\u0000\\u0007\\b\\t\\n\\u000b\\f\\r\\u001f /\"",
+      "digest": "sha256:a3efcc19dfabdc8ff7dea33e28a3d77efc306360a1fac00f0639c805bd6d618d"
+    },
+    {
+      "name": "numbers written in JSON text",
+      "json": "[0, -0, -0.0, 1, -1, 1.0, 100, 1e2, 1E30, 9007199254740993, 0.1, 1e-7, 123456789012345678901234567890]",
+      "canonical": "[0,0,0,1,-1,1,100,100,1e+30,9007199254740992,0.1,1e-7,1.2345678901234568e+29]",
+      "digest": "sha256:3b6e87e97f9f4fbbc05b773a14d5f286a73339e66e6e250fe7f31dcc0072c240"
+    },
+    {
+      "name": "nested members are sorted at every level",
+      "json": "{\"b\":[{\"z\":1,\"a\":[]}],\"a\":{\"c\":null,\"b\":{}}}",
+      "canonical": "{\"a\":{\"b\":{},\"c\":null},\"b\":[{\"a\":[],\"z\":1}]}",
+      "digest": "sha256:e825e68fd7d5403a33cadedd546fe11053d93a529138100d9b678ea6c5cc1ce3"
+    },
+    {
+      "name": "exact ref",
+      "json": "{\"revisionId\":\"r2\",\"projectId\":\"p1\",\"objectId\":\"source-1\"}",
+      "canonical": "{\"objectId\":\"source-1\",\"projectId\":\"p1\",\"revisionId\":\"r2\"}",
+      "digest": "sha256:3e0809f1f871c55d37c47808839a05acf0695b2c6b713de5aeeb3fa01e83e386"
+    }
+  ],
+  "invalid": [
+    {
+      "name": "lone high surrogate",
+      "json": "\"\\ud800\"",
+      "code": "lone-surrogate"
+    },
+    {
+      "name": "lone low surrogate in a member name",
+      "json": "{\"\\udc00\":1}",
+      "code": "lone-surrogate"
+    },
+    {
+      "name": "surrogates in the wrong order",
+      "json": "[\"\\udc00\\ud800\"]",
+      "code": "lone-surrogate"
+    },
+    {
+      "name": "number literal beyond double range",
+      "json": "[1e400]",
+      "code": "non-finite-number"
+    },
+    {
+      "name": "negative number literal beyond double range",
+      "json": "{\"a\":-1e400}",
+      "code": "non-finite-number"
+    },
+    {
+      "name": "integer literal beyond double range",
+      "json": "10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "code": "non-finite-number"
+    }
+  ],
+  "numbers": [
+    {
+      "bits": "0000000000000000",
+      "canonical": "0"
+    },
+    {
+      "bits": "8000000000000000",
+      "canonical": "0"
+    },
+    {
+      "bits": "0000000000000001",
+      "canonical": "5e-324"
+    },
+    {
+      "bits": "8000000000000001",
+      "canonical": "-5e-324"
+    },
+    {
+      "bits": "7fefffffffffffff",
+      "canonical": "1.7976931348623157e+308"
+    },
+    {
+      "bits": "ffefffffffffffff",
+      "canonical": "-1.7976931348623157e+308"
+    },
+    {
+      "bits": "4340000000000000",
+      "canonical": "9007199254740992"
+    },
+    {
+      "bits": "c340000000000000",
+      "canonical": "-9007199254740992"
+    },
+    {
+      "bits": "4430000000000000",
+      "canonical": "295147905179352830000"
+    },
+    {
+      "bits": "44b52d02c7e14af5",
+      "canonical": "9.999999999999997e+22"
+    },
+    {
+      "bits": "44b52d02c7e14af6",
+      "canonical": "1e+23"
+    },
+    {
+      "bits": "44b52d02c7e14af7",
+      "canonical": "1.0000000000000001e+23"
+    },
+    {
+      "bits": "444b1ae4d6e2ef4e",
+      "canonical": "999999999999999700000"
+    },
+    {
+      "bits": "444b1ae4d6e2ef4f",
+      "canonical": "999999999999999900000"
+    },
+    {
+      "bits": "444b1ae4d6e2ef50",
+      "canonical": "1e+21"
+    },
+    {
+      "bits": "3eb0c6f7a0b5ed8c",
+      "canonical": "9.999999999999997e-7"
+    },
+    {
+      "bits": "3eb0c6f7a0b5ed8d",
+      "canonical": "0.000001"
+    },
+    {
+      "bits": "41b3de4355555553",
+      "canonical": "333333333.3333332"
+    },
+    {
+      "bits": "41b3de4355555554",
+      "canonical": "333333333.33333325"
+    },
+    {
+      "bits": "41b3de4355555555",
+      "canonical": "333333333.3333333"
+    },
+    {
+      "bits": "41b3de4355555556",
+      "canonical": "333333333.3333334"
+    },
+    {
+      "bits": "41b3de4355555557",
+      "canonical": "333333333.33333343"
+    },
+    {
+      "bits": "becbf647612f3696",
+      "canonical": "-0.0000033333333333333333"
+    },
+    {
+      "bits": "43143ff3c1cb0959",
+      "canonical": "1424953923781206.2"
+    }
+  ],
+  "invalidNumbers": [
+    {
+      "name": "NaN",
+      "bits": "7ff8000000000000",
+      "code": "non-finite-number"
+    },
+    {
+      "name": "NaN with payload",
+      "bits": "7fffffffffffffff",
+      "code": "non-finite-number"
+    },
+    {
+      "name": "Infinity",
+      "bits": "7ff0000000000000",
+      "code": "non-finite-number"
+    },
+    {
+      "name": "-Infinity",
+      "bits": "fff0000000000000",
+      "code": "non-finite-number"
+    }
+  ]
+}
