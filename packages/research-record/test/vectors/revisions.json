@@ -1,0 +1,2365 @@
+{
+  "description": "Frozen research-record@1 identities. Each revision's id must equal the canonical digest of its other eight fields, in TypeScript (test/vectors.test.ts) and Python (python/tests). Built once by test/vectors/build.ts; never regenerate to make a test pass.",
+  "projectId": "project-1",
+  "revisions": [
+    {
+      "name": "protocol",
+      "seq": 1,
+      "revision": {
+        "projectId": "project-1",
+        "kind": "protocol",
+        "schema": "protocol@1",
+        "objectId": "protocol-1",
+        "parent": "none",
+        "author": {
+          "voice": "agent",
+          "id": "research"
+        },
+        "context": {
+          "run": "run-1",
+          "session": "session-research",
+          "message": "message-1",
+          "call": "call-protocol",
+          "initiator": {
+            "voice": "agent",
+            "id": "research"
+          }
+        },
+        "body": {
+          "question": "How much of the rise in US wage inequality since 1979 does union decline explain?",
+          "scope": {
+            "in": ["United States", "1979-2019"],
+            "out": ["public sector"]
+          },
+          "subquestions": [
+            {
+              "id": "sq-1",
+              "text": "How far did union density fall?"
+            },
+            {
+              "id": "sq-2",
+              "text": "What share of the rise in inequality is attributed to it?"
+            }
+          ],
+          "criteria": ["peer-reviewed or official statistics"],
+          "plan": "Search OpenAlex, read full text where open, quote counter-evidence.",
+          "effort": "standard",
+          "budgets": {
+            "subquestions": 2,
+            "sourcesPerSubquestion": 5,
+            "fullText": true
+          }
+        },
+        "revisionId": "sha256:63a785269e723151f572dbec642b69a1a00eabc4efffe54036bb2228afda6afb"
+      }
+    },
+    {
+      "name": "receipt search",
+      "seq": 2,
+      "revision": {
+        "projectId": "project-1",
+        "kind": "receipt",
+        "schema": "receipt@1",
+        "objectId": "receipt-search",
+        "parent": "none",
+        "author": {
+          "voice": "program",
+          "id": "research@2.3.0"
+        },
+        "context": {
+          "run": "run-1",
+          "session": "session-reader-1",
+          "message": "message-1",
+          "call": "call-find",
+          "initiator": {
+            "voice": "agent",
+            "id": "reader"
+          }
+        },
+        "body": {
+          "at": {
+            "started": "2026-11-15T10:01:00Z",
+            "ended": "2026-11-15T10:01:30Z"
+          },
+          "step": {
+            "kind": "tool",
+            "tool": "library.find",
+            "version": "1",
+            "replay": "stored",
+            "input": {
+              "digest": "sha256:932edbaa498f33ad98099ee039dcb2da88f0f91073b2c7f5da1cb64ae89b1c42",
+              "schema": "search-query@1"
+            },
+            "output": {
+              "digest": "sha256:5d65bd4ea9e3485f38fb6ed053a5c022d63dfe24c0a33e3843bd2a9e2d26dd16",
+              "schema": "search-results@1"
+            }
+          },
+          "written": [],
+          "skills": [
+            {
+              "name": "search-strategy",
+              "digest": "sha256:ca86e0096d5e7fba4102a132a72bc9645ae1bbba7cf5cf842f108b51b38d73ae"
+            }
+          ],
+          "lenses": [],
+          "outcome": {
+            "status": "ok"
+          }
+        },
+        "revisionId": "sha256:573b43a8213350d439255f82fae1f0fd92c5c0e171167d79783c6e8b52d39a70"
+      }
+    },
+    {
+      "name": "source",
+      "seq": 2,
+      "revision": {
+        "projectId": "project-1",
+        "kind": "source",
+        "schema": "source@1",
+        "objectId": "source-1",
+        "parent": "none",
+        "author": {
+          "voice": "program",
+          "id": "research@2.3.0"
+        },
+        "context": {
+          "run": "run-1",
+          "session": "session-reader-1",
+          "message": "message-1",
+          "call": "call-add",
+          "initiator": {
+            "voice": "agent",
+            "id": "reader"
+          }
+        },
+        "body": {
+          "type": "article-journal",
+          "identifiers": [
+            {
+              "scheme": "doi",
+              "value": "10.1177/0003122411414817"
+            },
+            {
+              "scheme": "openalex",
+              "value": "W1"
+            }
+          ],
+          "fields": {
+            "title": {
+              "value": "Unions, Norms, and the Rise in U.S. Wage Inequality",
+              "origin": {
+                "by": "service",
+                "service": "crossref",
+                "response": "sha256:121242276960279fb539b6d3677f53bba6c4b3a6de42ab726c0d60abd5111bf0"
+              }
+            },
+            "issued": {
+              "value": {
+                "date-parts": [[2011]]
+              },
+              "origin": {
+                "by": "service",
+                "service": "crossref",
+                "response": "sha256:121242276960279fb539b6d3677f53bba6c4b3a6de42ab726c0d60abd5111bf0"
+              }
+            }
+          }
+        },
+        "revisionId": "sha256:9e9bbef0bc418edeaf92238bc054bed53f84f102f959362dc58e9378d911fa8b"
+      }
+    },
+    {
+      "name": "copy",
+      "seq": 2,
+      "revision": {
+        "projectId": "project-1",
+        "kind": "copy",
+        "schema": "copy@1",
+        "objectId": "copy-1",
+        "parent": "none",
+        "author": {
+          "voice": "program",
+          "id": "research@2.3.0"
+        },
+        "context": {
+          "run": "run-1",
+          "session": "session-reader-1",
+          "message": "message-1",
+          "call": "call-add",
+          "initiator": {
+            "voice": "agent",
+            "id": "reader"
+          }
+        },
+        "body": {
+          "source": {
+            "projectId": "project-1",
+            "objectId": "source-1",
+            "revisionId": "sha256:9e9bbef0bc418edeaf92238bc054bed53f84f102f959362dc58e9378d911fa8b"
+          },
+          "blob": "sha256:98aa765a672bcf35483a98591538c5a7cacbf9370cbec06647c8010955b1180d",
+          "mediaType": "application/pdf",
+          "size": 14,
+          "content": "full-text",
+          "retrieved": {
+            "from": "https://example.org/paper.pdf",
+            "at": "2026-11-15T10:02:00Z"
+          },
+          "licence": "CC-BY-4.0"
+        },
+        "revisionId": "sha256:25bdb24afaeacd5c4d51e86afcecc1a7ddde7aa43cb93a5515b54a946d61d61b"
+      }
+    },
+    {
+      "name": "representation",
+      "seq": 2,
+      "revision": {
+        "projectId": "project-1",
+        "kind": "representation",
+        "schema": "representation@1",
+        "objectId": "representation-1",
+        "parent": "none",
+        "author": {
+          "voice": "program",
+          "id": "research@2.3.0"
+        },
+        "context": {
+          "run": "run-1",
+          "session": "session-reader-1",
+          "message": "message-1",
+          "call": "call-add",
+          "initiator": {
+            "voice": "agent",
+            "id": "reader"
+          }
+        },
+        "body": {
+          "copy": {
+            "projectId": "project-1",
+            "objectId": "copy-1",
+            "revisionId": "sha256:25bdb24afaeacd5c4d51e86afcecc1a7ddde7aa43cb93a5515b54a946d61d61b"
+          },
+          "blob": "sha256:e218bacb332b9d6e385b74fd5b768c45632d9f69dcb0f56449dbc17952f85a50",
+          "extractor": {
+            "id": "pdf-text",
+            "version": "0.4.1"
+          },
+          "tree": {
+            "digest": "sha256:dc9c5edb8b2d479e697b4b0b8ab874f32b325138598ce9e7b759eb8292110622",
+            "schema": "structure-tree@1"
+          },
+          "ocr": false
+        },
+        "revisionId": "sha256:e70a0d0a8378dad295cf88b83a4399e710bfe9b943358670f5f949b0f021a123"
+      }
+    },
+    {
+      "name": "receipt add",
+      "seq": 2,
+      "revision": {
+        "projectId": "project-1",
+        "kind": "receipt",
+        "schema": "receipt@1",
+        "objectId": "receipt-add",
+        "parent": "none",
+        "author": {
+          "voice": "program",
+          "id": "research@2.3.0"
+        },
+        "context": {
+          "run": "run-1",
+          "session": "session-reader-1",
+          "message": "message-1",
+          "call": "call-add",
+          "initiator": {
+            "voice": "agent",
+            "id": "reader"
+          }
+        },
+        "body": {
+          "at": {
+            "started": "2026-11-15T10:02:00Z",
+            "ended": "2026-11-15T10:02:30Z"
+          },
+          "step": {
+            "kind": "tool",
+            "tool": "library.add",
+            "version": "1",
+            "replay": "stored",
+            "input": {
+              "digest": "sha256:dce66a96ccef47edae01132ad2a53b06f6136b7f091eeddc610c759e997205f1",
+              "schema": "none"
+            },
+            "output": {
+              "digest": "sha256:6569128aaab1e75831daca0ca2d052b1b694230f738e132295b0fe4fa7740669",
+              "schema": "none"
+            }
+          },
+          "written": [
+            {
+              "projectId": "project-1",
+              "objectId": "copy-1",
+              "revisionId": "sha256:25bdb24afaeacd5c4d51e86afcecc1a7ddde7aa43cb93a5515b54a946d61d61b"
+            },
+            {
+              "projectId": "project-1",
+              "objectId": "representation-1",
+              "revisionId": "sha256:e70a0d0a8378dad295cf88b83a4399e710bfe9b943358670f5f949b0f021a123"
+            },
+            {
+              "projectId": "project-1",
+              "objectId": "source-1",
+              "revisionId": "sha256:9e9bbef0bc418edeaf92238bc054bed53f84f102f959362dc58e9378d911fa8b"
+            }
+          ],
+          "skills": [],
+          "lenses": [],
+          "outcome": {
+            "status": "ok"
+          }
+        },
+        "revisionId": "sha256:5f846d65c57357ddbff3612e6eba9335ce61ee348a1fb57108141f702cac08b7"
+      }
+    },
+    {
+      "name": "fragment",
+      "seq": 3,
+      "revision": {
+        "projectId": "project-1",
+        "kind": "fragment",
+        "schema": "fragment@1",
+        "objectId": "fragment-1",
+        "parent": "none",
+        "author": {
+          "voice": "program",
+          "id": "research@2.3.0"
+        },
+        "context": {
+          "run": "run-1",
+          "session": "session-reader-1",
+          "message": "message-1",
+          "call": "call-quote",
+          "initiator": {
+            "voice": "agent",
+            "id": "reader"
+          }
+        },
+        "body": {
+          "representation": {
+            "projectId": "project-1",
+            "objectId": "representation-1",
+            "revisionId": "sha256:e70a0d0a8378dad295cf88b83a4399e710bfe9b943358670f5f949b0f021a123"
+          },
+          "representationDigest": "sha256:e218bacb332b9d6e385b74fd5b768c45632d9f69dcb0f56449dbc17952f85a50",
+          "selector": {
+            "profile": "utf8-bytes@1",
+            "start": 0,
+            "end": 34,
+            "quote": "Union density fell from 35% to 11%"
+          },
+          "before": "",
+          "after": " between 1979 and 2019.",
+          "page": {
+            "number": 4,
+            "boxes": [[72, 540.5, 523, 552]]
+          }
+        },
+        "revisionId": "sha256:e47b80ee854c35a15b8d044c14eb2992077df06f6ee6dade7b14e2ddf20664ef"
+      }
+    },
+    {
+      "name": "claim",
+      "seq": 4,
+      "revision": {
+        "projectId": "project-1",
+        "kind": "claim",
+        "schema": "claim@1",
+        "objectId": "claim-1",
+        "parent": "none",
+        "author": {
+          "voice": "agent",
+          "id": "reader"
+        },
+        "context": {
+          "run": "run-1",
+          "session": "session-reader-1",
+          "message": "message-1",
+          "call": "call-claim",
+          "initiator": {
+            "voice": "agent",
+            "id": "reader"
+          }
+        },
+        "body": {
+          "text": "US union density fell from 35% to 11% between 1979 and 2019.",
+          "scope": "Private and public sectors combined",
+          "addresses": {
+            "protocol": {
+              "projectId": "project-1",
+              "objectId": "protocol-1",
+              "revisionId": "sha256:63a785269e723151f572dbec642b69a1a00eabc4efffe54036bb2228afda6afb"
+            },
+            "subquestion": "sq-1"
+          }
+        },
+        "revisionId": "sha256:83212d5b586600d3e8f11e466e8d4de8794f29aff66707516873a8ebe6c43d82"
+      }
+    },
+    {
+      "name": "evidence",
+      "seq": 4,
+      "revision": {
+        "projectId": "project-1",
+        "kind": "evidence",
+        "schema": "evidence@1",
+        "objectId": "evidence-1",
+        "parent": "none",
+        "author": {
+          "voice": "agent",
+          "id": "reader"
+        },
+        "context": {
+          "run": "run-1",
+          "session": "session-reader-1",
+          "message": "message-1",
+          "call": "call-claim",
+          "initiator": {
+            "voice": "agent",
+            "id": "reader"
+          }
+        },
+        "body": {
+          "claim": {
+            "projectId": "project-1",
+            "objectId": "claim-1",
+            "revisionId": "sha256:83212d5b586600d3e8f11e466e8d4de8794f29aff66707516873a8ebe6c43d82"
+          },
+          "role": "supports",
+          "basis": {
+            "kind": "quote",
+            "cited": [
+              {
+                "fragment": {
+                  "projectId": "project-1",
+                  "objectId": "fragment-1",
+                  "revisionId": "sha256:e47b80ee854c35a15b8d044c14eb2992077df06f6ee6dade7b14e2ddf20664ef"
+                },
+                "read": [
+                  {
+                    "start": 0,
+                    "end": 13
+                  },
+                  {
+                    "start": 19,
+                    "end": 34
+                  }
+                ],
+                "insertions": [
+                  {
+                    "at": 0,
+                    "text": "US"
+                  }
+                ],
+                "secondary": "no"
+              }
+            ]
+          },
+          "note": "The headline numbers, read from the abstract's first sentence."
+        },
+        "revisionId": "sha256:123546bdb4659d9bf4dfddd123873726f74c9197d22abe531ba07309fbef1ba9"
+      }
+    },
+    {
+      "name": "receipt claim",
+      "seq": 4,
+      "revision": {
+        "projectId": "project-1",
+        "kind": "receipt",
+        "schema": "receipt@1",
+        "objectId": "receipt-claim",
+        "parent": "none",
+        "author": {
+          "voice": "program",
+          "id": "research@2.3.0"
+        },
+        "context": {
+          "run": "run-1",
+          "session": "session-reader-1",
+          "message": "message-1",
+          "call": "call-claim",
+          "initiator": {
+            "voice": "agent",
+            "id": "reader"
+          }
+        },
+        "body": {
+          "at": {
+            "started": "2026-11-15T10:04:00Z",
+            "ended": "2026-11-15T10:04:30Z"
+          },
+          "step": {
+            "kind": "tool",
+            "tool": "evidence.claim",
+            "version": "1",
+            "replay": "rerun",
+            "input": {
+              "digest": "sha256:388b394bc8b81554932d8dde615e72624e5e3ba3f7191a0381e8e352242d994c",
+              "schema": "none"
+            },
+            "output": {
+              "digest": "sha256:964338a199e267a71c1952045e8336219d93dc5f495591a816c858d87cbf7b5a",
+              "schema": "none"
+            }
+          },
+          "written": [
+            {
+              "projectId": "project-1",
+              "objectId": "claim-1",
+              "revisionId": "sha256:83212d5b586600d3e8f11e466e8d4de8794f29aff66707516873a8ebe6c43d82"
+            },
+            {
+              "projectId": "project-1",
+              "objectId": "evidence-1",
+              "revisionId": "sha256:123546bdb4659d9bf4dfddd123873726f74c9197d22abe531ba07309fbef1ba9"
+            }
+          ],
+          "skills": [],
+          "lenses": [],
+          "outcome": {
+            "status": "ok"
+          }
+        },
+        "revisionId": "sha256:8bc21f800c42c4e9f67efb3614226b9be1f098282ef257875dcfce15f6b07d76"
+      }
+    },
+    {
+      "name": "claim computed",
+      "seq": 5,
+      "revision": {
+        "projectId": "project-1",
+        "kind": "claim",
+        "schema": "claim@1",
+        "objectId": "claim-2",
+        "parent": "none",
+        "author": {
+          "voice": "agent",
+          "id": "reader"
+        },
+        "context": {
+          "run": "run-1",
+          "session": "session-reader-1",
+          "message": "message-1",
+          "call": "call-script",
+          "initiator": {
+            "voice": "agent",
+            "id": "reader"
+          }
+        },
+        "body": {
+          "text": "Two of the five sources report a decline of more than 20 points.",
+          "scope": "This library",
+          "addresses": "none"
+        },
+        "revisionId": "sha256:7b2bf54ca8428b6cd62759d39d0cd590872c6fe37a1f4c254420901c4b3ddc79"
+      }
+    },
+    {
+      "name": "artifact table",
+      "seq": 5,
+      "revision": {
+        "projectId": "project-1",
+        "kind": "artifact",
+        "schema": "artifact@1",
+        "objectId": "artifact-table",
+        "parent": "none",
+        "author": {
+          "voice": "program",
+          "id": "research@2.3.0"
+        },
+        "context": {
+          "run": "run-1",
+          "session": "session-reader-1",
+          "message": "message-1",
+          "call": "call-script",
+          "initiator": {
+            "voice": "agent",
+            "id": "reader"
+          }
+        },
+        "body": {
+          "inputs": [
+            {
+              "projectId": "project-1",
+              "objectId": "source-1",
+              "revisionId": "sha256:9e9bbef0bc418edeaf92238bc054bed53f84f102f959362dc58e9378d911fa8b"
+            }
+          ],
+          "output": {
+            "digest": "sha256:bdc761305cf403fdeaba3eb64c3e9986fd3ee2aa6696f73100e53ca2dccbaffd",
+            "schema": "none",
+            "mediaType": "text/csv"
+          },
+          "transformation": "codemode.script"
+        },
+        "revisionId": "sha256:0c9492af226048a1bc4c6f3121b4a5ff7490ed3e483eea597aa6b8eea402a70d"
+      }
+    },
+    {
+      "name": "receipt script",
+      "seq": 5,
+      "revision": {
+        "projectId": "project-1",
+        "kind": "receipt",
+        "schema": "receipt@1",
+        "objectId": "receipt-script",
+        "parent": "none",
+        "author": {
+          "voice": "program",
+          "id": "research@2.3.0"
+        },
+        "context": {
+          "run": "run-1",
+          "session": "session-reader-1",
+          "message": "message-1",
+          "call": "call-script",
+          "initiator": {
+            "voice": "agent",
+            "id": "reader"
+          }
+        },
+        "body": {
+          "at": {
+            "started": "2026-11-15T10:05:00Z",
+            "ended": "2026-11-15T10:05:30Z"
+          },
+          "step": {
+            "kind": "script",
+            "script": {
+              "digest": "sha256:dc61308894f884d95dc48850d876d4aa15f611f497936d84f775de0ddcc29443",
+              "schema": "codemode-script@1"
+            },
+            "engine": {
+              "id": "opencode-codemode",
+              "version": "2.3.0"
+            },
+            "clock": "2026-11-15T10:05:00Z",
+            "seed": "seed-1",
+            "calls": [
+              {
+                "tool": "library.grep",
+                "version": "1",
+                "input": {
+                  "digest": "sha256:fed40f18ab2a6a9b464ac68eb49c064e484f00ce82d9393f3664061b9d11f860",
+                  "schema": "none"
+                },
+                "output": {
+                  "digest": "sha256:49a64717d5d4cb19952e6eac2946415cf6879adacf9908e7d872332d32c6e684",
+                  "schema": "none"
+                }
+              },
+              {
+                "tool": "library.read",
+                "version": "1",
+                "input": {
+                  "digest": "sha256:4d887b6e6f416063fcef9641304b8492782e61de608ad48e495050687f2f40ef",
+                  "schema": "none"
+                },
+                "output": {
+                  "error": "no such address"
+                }
+              }
+            ],
+            "result": {
+              "digest": "sha256:d4735e3a265e16eee03f59718b9b5d03019c07d8b6c51f90da3a666eec13ab35",
+              "schema": "none"
+            }
+          },
+          "written": [
+            {
+              "projectId": "project-1",
+              "objectId": "artifact-table",
+              "revisionId": "sha256:0c9492af226048a1bc4c6f3121b4a5ff7490ed3e483eea597aa6b8eea402a70d"
+            },
+            {
+              "projectId": "project-1",
+              "objectId": "claim-2",
+              "revisionId": "sha256:7b2bf54ca8428b6cd62759d39d0cd590872c6fe37a1f4c254420901c4b3ddc79"
+            }
+          ],
+          "skills": [],
+          "lenses": [],
+          "outcome": {
+            "status": "ok"
+          }
+        },
+        "revisionId": "sha256:3f3a1c7463d6baca58bfe716fe69e0668bb086dad4938c7f0bc607cf70a74e98"
+      }
+    },
+    {
+      "name": "receipt model",
+      "seq": 5,
+      "revision": {
+        "projectId": "project-1",
+        "kind": "receipt",
+        "schema": "receipt@1",
+        "objectId": "receipt-model",
+        "parent": "none",
+        "author": {
+          "voice": "program",
+          "id": "research@2.3.0"
+        },
+        "context": {
+          "run": "run-1",
+          "session": "session-reader-1",
+          "message": "message-1",
+          "call": "none",
+          "initiator": {
+            "voice": "agent",
+            "id": "reader"
+          }
+        },
+        "body": {
+          "at": {
+            "started": "2026-11-15T10:06:00Z",
+            "ended": "2026-11-15T10:06:30Z"
+          },
+          "step": {
+            "kind": "model",
+            "provider": "opencode-go",
+            "model": "deepseek-v4.1-flash",
+            "request": {
+              "digest": "sha256:e6a1023358a5f8c275c0ae3481bbd8101a9a6cdbd4ce6b4d5131017e43b1cd14",
+              "schema": "context-manifest@1"
+            },
+            "response": {
+              "digest": "sha256:a9f4b3d22a523fdada41c85c175425bcd15b32b4cd0f54d9433accd52d7195a1",
+              "schema": "model-response@1"
+            }
+          },
+          "written": [],
+          "skills": [
+            {
+              "name": "read-and-quote",
+              "digest": "sha256:3cb602e009f9180c2eb1e7e9031eb886203ab2a8d3c3cade925f2b797123ccae"
+            }
+          ],
+          "lenses": [],
+          "outcome": {
+            "status": "ok"
+          }
+        },
+        "revisionId": "sha256:e1fecc00a9686422911c03fb592a3bb71ca847ecec1f2f4cfe74005d14f6701d"
+      }
+    },
+    {
+      "name": "evidence computed",
+      "seq": 6,
+      "revision": {
+        "projectId": "project-1",
+        "kind": "evidence",
+        "schema": "evidence@1",
+        "objectId": "evidence-2",
+        "parent": "none",
+        "author": {
+          "voice": "agent",
+          "id": "reader"
+        },
+        "context": {
+          "run": "run-1",
+          "session": "session-reader-1",
+          "message": "message-1",
+          "call": "call-claim-2",
+          "initiator": {
+            "voice": "agent",
+            "id": "reader"
+          }
+        },
+        "body": {
+          "claim": {
+            "projectId": "project-1",
+            "objectId": "claim-2",
+            "revisionId": "sha256:7b2bf54ca8428b6cd62759d39d0cd590872c6fe37a1f4c254420901c4b3ddc79"
+          },
+          "role": "supports",
+          "basis": {
+            "kind": "computation",
+            "run": {
+              "projectId": "project-1",
+              "objectId": "receipt-script",
+              "revisionId": "sha256:3f3a1c7463d6baca58bfe716fe69e0668bb086dad4938c7f0bc607cf70a74e98"
+            },
+            "output": {
+              "projectId": "project-1",
+              "objectId": "artifact-table",
+              "revisionId": "sha256:0c9492af226048a1bc4c6f3121b4a5ff7490ed3e483eea597aa6b8eea402a70d"
+            }
+          },
+          "note": ""
+        },
+        "revisionId": "sha256:6aeb949fe64b951cdc011813866d1b281505b23a4611125ca6af38e524138ee8"
+      }
+    },
+    {
+      "name": "artifact lens manifest",
+      "seq": 6,
+      "revision": {
+        "projectId": "project-1",
+        "kind": "artifact",
+        "schema": "artifact@1",
+        "objectId": "artifact-lens",
+        "parent": "none",
+        "author": {
+          "voice": "program",
+          "id": "research@2.3.0"
+        },
+        "context": {
+          "run": "run-1",
+          "session": "session-research",
+          "message": "message-1",
+          "call": "call-draft-lens",
+          "initiator": {
+            "voice": "agent",
+            "id": "research"
+          }
+        },
+        "body": {
+          "inputs": [
+            {
+              "projectId": "project-1",
+              "objectId": "source-1",
+              "revisionId": "sha256:9e9bbef0bc418edeaf92238bc054bed53f84f102f959362dc58e9378d911fa8b"
+            }
+          ],
+          "output": {
+            "digest": "sha256:e0ab24f50c8a372e295a283ba4cab449dd247bd4642fded42325ddca349bdab1",
+            "schema": "lens-manifest@1",
+            "mediaType": "application/json"
+          },
+          "transformation": "lens.draft"
+        },
+        "revisionId": "sha256:257e822abfabdc449c7353b23d179469be3d0d4887ccd031cea4026f256b10dc"
+      }
+    },
+    {
+      "name": "artifact answer",
+      "seq": 6,
+      "revision": {
+        "projectId": "project-1",
+        "kind": "artifact",
+        "schema": "artifact@1",
+        "objectId": "artifact-answer",
+        "parent": "none",
+        "author": {
+          "voice": "program",
+          "id": "research@2.3.0"
+        },
+        "context": {
+          "run": "run-1",
+          "session": "session-research",
+          "message": "message-1",
+          "call": "call-render",
+          "initiator": {
+            "voice": "agent",
+            "id": "research"
+          }
+        },
+        "body": {
+          "inputs": [
+            {
+              "projectId": "project-1",
+              "objectId": "claim-1",
+              "revisionId": "sha256:83212d5b586600d3e8f11e466e8d4de8794f29aff66707516873a8ebe6c43d82"
+            }
+          ],
+          "output": {
+            "digest": "sha256:33230f70e008684fede2be646d59746d619f0de35cba70403f027e088b11dcec",
+            "schema": "answer@1",
+            "mediaType": "text/markdown"
+          },
+          "transformation": "render.answer"
+        },
+        "revisionId": "sha256:8384dd18984383cdbd7e05b02f47a9486e6ee1836c7d2830fc9d4c5df76d0533"
+      }
+    },
+    {
+      "name": "judgment support",
+      "seq": 7,
+      "revision": {
+        "projectId": "project-1",
+        "kind": "judgment",
+        "schema": "judgment@1",
+        "objectId": "judgment-support",
+        "parent": "none",
+        "author": {
+          "voice": "agent",
+          "id": "checker"
+        },
+        "context": {
+          "run": "run-1",
+          "session": "session-reader-1",
+          "message": "message-1",
+          "call": "call-check",
+          "initiator": {
+            "voice": "agent",
+            "id": "reader"
+          }
+        },
+        "body": {
+          "type": "support",
+          "reason": "The quote states the figures.",
+          "evidence": {
+            "projectId": "project-1",
+            "objectId": "evidence-1",
+            "revisionId": "sha256:123546bdb4659d9bf4dfddd123873726f74c9197d22abe531ba07309fbef1ba9"
+          },
+          "opinion": "supports"
+        },
+        "revisionId": "sha256:bf35aea7c32ed676da1672d28c674425d88e53215f839569b15e0eed10c9b920"
+      }
+    },
+    {
+      "name": "judgment challenge",
+      "seq": 7,
+      "revision": {
+        "projectId": "project-1",
+        "kind": "judgment",
+        "schema": "judgment@1",
+        "objectId": "judgment-challenge",
+        "parent": "none",
+        "author": {
+          "voice": "agent",
+          "id": "checker"
+        },
+        "context": {
+          "run": "run-1",
+          "session": "session-reader-1",
+          "message": "message-1",
+          "call": "call-check",
+          "initiator": {
+            "voice": "agent",
+            "id": "reader"
+          }
+        },
+        "body": {
+          "type": "challenge",
+          "reason": "The read spans skip 'fell'.",
+          "evidence": {
+            "projectId": "project-1",
+            "objectId": "evidence-1",
+            "revisionId": "sha256:123546bdb4659d9bf4dfddd123873726f74c9197d22abe531ba07309fbef1ba9"
+          },
+          "grounds": "clipped"
+        },
+        "revisionId": "sha256:d0985ab2aea2c655aad9f37cae147349537998ffdb832b2e990abe1a22e18fce"
+      }
+    },
+    {
+      "name": "judgment screening",
+      "seq": 7,
+      "revision": {
+        "projectId": "project-1",
+        "kind": "judgment",
+        "schema": "judgment@1",
+        "objectId": "judgment-screening",
+        "parent": "none",
+        "author": {
+          "voice": "agent",
+          "id": "reader"
+        },
+        "context": {
+          "run": "run-1",
+          "session": "session-reader-1",
+          "message": "message-1",
+          "call": "call-screen",
+          "initiator": {
+            "voice": "agent",
+            "id": "reader"
+          }
+        },
+        "body": {
+          "type": "screening",
+          "reason": "On topic and in period.",
+          "source": {
+            "projectId": "project-1",
+            "objectId": "source-1",
+            "revisionId": "sha256:9e9bbef0bc418edeaf92238bc054bed53f84f102f959362dc58e9378d911fa8b"
+          },
+          "protocol": {
+            "projectId": "project-1",
+            "objectId": "protocol-1",
+            "revisionId": "sha256:63a785269e723151f572dbec642b69a1a00eabc4efffe54036bb2228afda6afb"
+          },
+          "call": "include"
+        },
+        "revisionId": "sha256:72506f7c38238e7b8861e71f980bb51303a0da9277bb5e4b86eca654b7831ee0"
+      }
+    },
+    {
+      "name": "judgment gap",
+      "seq": 7,
+      "revision": {
+        "projectId": "project-1",
+        "kind": "judgment",
+        "schema": "judgment@1",
+        "objectId": "judgment-gap",
+        "parent": "none",
+        "author": {
+          "voice": "agent",
+          "id": "reader"
+        },
+        "context": {
+          "run": "run-1",
+          "session": "session-reader-1",
+          "message": "message-1",
+          "call": "call-gap",
+          "initiator": {
+            "voice": "agent",
+            "id": "reader"
+          }
+        },
+        "body": {
+          "type": "gap",
+          "reason": "No source attributes a share.",
+          "protocol": {
+            "projectId": "project-1",
+            "objectId": "protocol-1",
+            "revisionId": "sha256:63a785269e723151f572dbec642b69a1a00eabc4efffe54036bb2228afda6afb"
+          },
+          "subquestion": "sq-2",
+          "missing": "A decomposition of the inequality rise",
+          "searched": [
+            {
+              "projectId": "project-1",
+              "objectId": "receipt-search",
+              "revisionId": "sha256:573b43a8213350d439255f82fae1f0fd92c5c0e171167d79783c6e8b52d39a70"
+            }
+          ],
+          "close": "Add Western and Rosenfeld (2011) in full text."
+        },
+        "revisionId": "sha256:68df27dc1953b68be256a054369a49b80944f463be80fa76f3d323d114caac10"
+      }
+    },
+    {
+      "name": "judgment metadata",
+      "seq": 7,
+      "revision": {
+        "projectId": "project-1",
+        "kind": "judgment",
+        "schema": "judgment@1",
+        "objectId": "judgment-metadata",
+        "parent": "none",
+        "author": {
+          "voice": "agent",
+          "id": "reader"
+        },
+        "context": {
+          "run": "run-1",
+          "session": "session-reader-1",
+          "message": "message-1",
+          "call": "call-meta",
+          "initiator": {
+            "voice": "agent",
+            "id": "reader"
+          }
+        },
+        "body": {
+          "type": "metadata",
+          "reason": "Printed on the first page.",
+          "source": {
+            "projectId": "project-1",
+            "objectId": "source-1",
+            "revisionId": "sha256:9e9bbef0bc418edeaf92238bc054bed53f84f102f959362dc58e9378d911fa8b"
+          },
+          "field": "publisher",
+          "value": "SAGE"
+        },
+        "revisionId": "sha256:e186ef07b50e501f690cbdf70cbc13b4fa5ff52d4734bcb3ab53b015b488adb4"
+      }
+    },
+    {
+      "name": "judgment lens choice",
+      "seq": 7,
+      "revision": {
+        "projectId": "project-1",
+        "kind": "judgment",
+        "schema": "judgment@1",
+        "objectId": "judgment-lens",
+        "parent": "none",
+        "author": {
+          "voice": "agent",
+          "id": "research"
+        },
+        "context": {
+          "run": "run-1",
+          "session": "session-research",
+          "message": "message-1",
+          "call": "call-lens",
+          "initiator": {
+            "voice": "agent",
+            "id": "research"
+          }
+        },
+        "body": {
+          "type": "lens-choice",
+          "reason": "The question is about bargaining power.",
+          "subject": [
+            {
+              "projectId": "project-1",
+              "objectId": "protocol-1",
+              "revisionId": "sha256:63a785269e723151f572dbec642b69a1a00eabc4efffe54036bb2228afda6afb"
+            }
+          ],
+          "chosen": {
+            "id": "power-resources",
+            "version": "0.1.0",
+            "digest": "sha256:e0ab24f50c8a372e295a283ba4cab449dd247bd4642fded42325ddca349bdab1"
+          }
+        },
+        "revisionId": "sha256:7760dca6fe24461eca6f172262395e6dfea454cfb3fafe219767b7d12a48e308"
+      }
+    },
+    {
+      "name": "decision challenge ruling",
+      "seq": 8,
+      "revision": {
+        "projectId": "project-1",
+        "kind": "decision",
+        "schema": "decision@1",
+        "objectId": "sha256:cc80e958b34ad80675d7eff323b7775a1262ffd34b818604bcf14751b8671f26",
+        "parent": "none",
+        "author": {
+          "voice": "researcher",
+          "id": "owner"
+        },
+        "context": "none",
+        "body": {
+          "type": "challenge-ruling",
+          "reason": "The gap is marked; nothing is clipped.",
+          "attestation": {
+            "level": "tty",
+            "surface": "cli"
+          },
+          "challenge": {
+            "projectId": "project-1",
+            "objectId": "judgment-challenge",
+            "revisionId": "sha256:d0985ab2aea2c655aad9f37cae147349537998ffdb832b2e990abe1a22e18fce"
+          },
+          "ruling": "dismissed"
+        },
+        "revisionId": "sha256:5644d08bad37b2851c7eb4cb60e7dbe061ba5f95300e5addbf0c1005c3b25072"
+      }
+    },
+    {
+      "name": "decision adoption",
+      "seq": 8,
+      "revision": {
+        "projectId": "project-1",
+        "kind": "decision",
+        "schema": "decision@1",
+        "objectId": "sha256:e44b6be64902029c4fbe13f81d984d7e807d67d199ed3df00ba9b438e6bec57d",
+        "parent": "none",
+        "author": {
+          "voice": "researcher",
+          "id": "owner"
+        },
+        "context": "none",
+        "body": {
+          "type": "adoption",
+          "reason": "",
+          "attestation": {
+            "level": "tty",
+            "surface": "cli"
+          },
+          "claim": {
+            "projectId": "project-1",
+            "objectId": "claim-1",
+            "revisionId": "sha256:83212d5b586600d3e8f11e466e8d4de8794f29aff66707516873a8ebe6c43d82"
+          },
+          "evidence": [
+            {
+              "projectId": "project-1",
+              "objectId": "evidence-1",
+              "revisionId": "sha256:123546bdb4659d9bf4dfddd123873726f74c9197d22abe531ba07309fbef1ba9"
+            }
+          ],
+          "ruling": "adopt"
+        },
+        "revisionId": "sha256:3a2b1df9549af08a807fe486424e55b288517f0586065cae491f560ebff03962"
+      }
+    },
+    {
+      "name": "decision metadata",
+      "seq": 8,
+      "revision": {
+        "projectId": "project-1",
+        "kind": "decision",
+        "schema": "decision@1",
+        "objectId": "sha256:1f8024b94f5ea224eb0686232856e616e7dde44fdcad56f6e7731b86e99c6cfa",
+        "parent": "none",
+        "author": {
+          "voice": "researcher",
+          "id": "owner"
+        },
+        "context": "none",
+        "body": {
+          "type": "metadata",
+          "reason": "Shorter title.",
+          "attestation": {
+            "level": "tty",
+            "surface": "cli"
+          },
+          "source": {
+            "projectId": "project-1",
+            "objectId": "source-1",
+            "revisionId": "sha256:9e9bbef0bc418edeaf92238bc054bed53f84f102f959362dc58e9378d911fa8b"
+          },
+          "field": "title",
+          "value": "Unions, Norms, and Wage Inequality"
+        },
+        "revisionId": "sha256:3cb924e6a2095c4d34d658de363822643d1de8e912f2317bf91db0ee46518788"
+      }
+    },
+    {
+      "name": "decision challenge",
+      "seq": 8,
+      "revision": {
+        "projectId": "project-1",
+        "kind": "decision",
+        "schema": "decision@1",
+        "objectId": "sha256:e49fbf3616bbfab4b19177a242f03b0d1036b221593dd7ee52b476e9df2de849",
+        "parent": "none",
+        "author": {
+          "voice": "researcher",
+          "id": "owner"
+        },
+        "context": "none",
+        "body": {
+          "type": "challenge",
+          "reason": "The count includes a duplicate.",
+          "attestation": {
+            "level": "tui-gesture",
+            "surface": "tui"
+          },
+          "evidence": {
+            "projectId": "project-1",
+            "objectId": "evidence-2",
+            "revisionId": "sha256:6aeb949fe64b951cdc011813866d1b281505b23a4611125ca6af38e524138ee8"
+          },
+          "grounds": "other"
+        },
+        "revisionId": "sha256:1412296ed7f1d71e6ae767f393098caa4a956dc87b71b224078e1fa8cde95634"
+      }
+    },
+    {
+      "name": "decision lens setting",
+      "seq": 8,
+      "revision": {
+        "projectId": "project-1",
+        "kind": "decision",
+        "schema": "decision@1",
+        "objectId": "sha256:1414bef5bc2903d3a25bd1b2dfd8a6e0faf2d9656d239e95f4f06302bbba8b85",
+        "parent": "none",
+        "author": {
+          "voice": "researcher",
+          "id": "owner"
+        },
+        "context": "none",
+        "body": {
+          "type": "lens-setting",
+          "reason": "Keep the default reading too.",
+          "attestation": {
+            "level": "tty",
+            "surface": "cli"
+          },
+          "subject": [
+            {
+              "projectId": "project-1",
+              "objectId": "protocol-1",
+              "revisionId": "sha256:63a785269e723151f572dbec642b69a1a00eabc4efffe54036bb2228afda6afb"
+            }
+          ],
+          "lens": {
+            "id": "power-resources",
+            "version": "0.1.0",
+            "digest": "sha256:e0ab24f50c8a372e295a283ba4cab449dd247bd4642fded42325ddca349bdab1"
+          },
+          "overrides": {
+            "projectId": "project-1",
+            "objectId": "judgment-lens",
+            "revisionId": "sha256:7760dca6fe24461eca6f172262395e6dfea454cfb3fafe219767b7d12a48e308"
+          }
+        },
+        "revisionId": "sha256:817f27b8110197bdc792c8b71440292eb49a453b6e60d0921abb10a61f838d56"
+      }
+    },
+    {
+      "name": "decision lens adoption",
+      "seq": 8,
+      "revision": {
+        "projectId": "project-1",
+        "kind": "decision",
+        "schema": "decision@1",
+        "objectId": "sha256:988d3a3fe4a2682e2d251e2885b6541b0e27bdad6018978730c4e0053f7279c0",
+        "parent": "none",
+        "author": {
+          "voice": "researcher",
+          "id": "owner"
+        },
+        "context": "none",
+        "body": {
+          "type": "lens-adoption",
+          "reason": "",
+          "attestation": {
+            "level": "tty",
+            "surface": "cli"
+          },
+          "manifest": {
+            "projectId": "project-1",
+            "objectId": "artifact-lens",
+            "revisionId": "sha256:257e822abfabdc449c7353b23d179469be3d0d4887ccd031cea4026f256b10dc"
+          },
+          "ruling": "adopt"
+        },
+        "revisionId": "sha256:3fa92100e4f7401bf71c89489482592e7e077fead5c5884c56f431f8affff1a8"
+      }
+    },
+    {
+      "name": "decision unattested",
+      "seq": 8,
+      "revision": {
+        "projectId": "project-1",
+        "kind": "decision",
+        "schema": "decision@1",
+        "objectId": "sha256:63c31a9139f75ec9d9d9a23a4a51a471915eef6b70ffa7e81ad29b48e895f984",
+        "parent": "none",
+        "author": {
+          "voice": "researcher",
+          "id": "owner"
+        },
+        "context": "none",
+        "body": {
+          "type": "adoption",
+          "reason": "Run by a shell command.",
+          "attestation": {
+            "level": "unattested",
+            "surface": "shell"
+          },
+          "claim": {
+            "projectId": "project-1",
+            "objectId": "claim-2",
+            "revisionId": "sha256:7b2bf54ca8428b6cd62759d39d0cd590872c6fe37a1f4c254420901c4b3ddc79"
+          },
+          "evidence": [
+            {
+              "projectId": "project-1",
+              "objectId": "evidence-2",
+              "revisionId": "sha256:6aeb949fe64b951cdc011813866d1b281505b23a4611125ca6af38e524138ee8"
+            }
+          ],
+          "ruling": "adopt"
+        },
+        "revisionId": "sha256:118ee5084ba2d75c4151ab5ec874941e1dd8cf6bc34fba3ee1dcc97b945f15f5"
+      }
+    },
+    {
+      "name": "representation newer",
+      "seq": 9,
+      "revision": {
+        "projectId": "project-1",
+        "kind": "representation",
+        "schema": "representation@1",
+        "objectId": "representation-2",
+        "parent": "none",
+        "author": {
+          "voice": "program",
+          "id": "research@2.3.0"
+        },
+        "context": {
+          "run": "run-1",
+          "session": "session-reader-1",
+          "message": "message-1",
+          "call": "call-add-2",
+          "initiator": {
+            "voice": "agent",
+            "id": "reader"
+          }
+        },
+        "body": {
+          "copy": {
+            "projectId": "project-1",
+            "objectId": "copy-1",
+            "revisionId": "sha256:25bdb24afaeacd5c4d51e86afcecc1a7ddde7aa43cb93a5515b54a946d61d61b"
+          },
+          "blob": "sha256:66440abf361a3861c3d7774df1560f50302d6e8b456658603fef4a586fad5a33",
+          "extractor": {
+            "id": "pdf-text",
+            "version": "0.5.0"
+          },
+          "tree": {
+            "digest": "sha256:1e2703ee1bcf3ff0426b5d98e557d836d43e6c4b5f6157a72f1970f896163236",
+            "schema": "structure-tree@1"
+          },
+          "ocr": true
+        },
+        "revisionId": "sha256:ae7f9905780228be2fcc2837d46a3f3d191a6c878729f8fc81b9c16c85c8bc55"
+      }
+    },
+    {
+      "name": "refused lens works missing",
+      "seq": 9,
+      "revision": {
+        "projectId": "project-1",
+        "kind": "receipt",
+        "schema": "receipt@1",
+        "objectId": "receipt-refused-lens-works-missing",
+        "parent": "none",
+        "author": {
+          "voice": "program",
+          "id": "research@2.3.0"
+        },
+        "context": {
+          "run": "run-1",
+          "session": "session-reader-1",
+          "message": "message-1",
+          "call": "call-10",
+          "initiator": {
+            "voice": "agent",
+            "id": "reader"
+          }
+        },
+        "body": {
+          "at": {
+            "started": "2026-11-15T10:10:00Z",
+            "ended": "2026-11-15T10:10:30Z"
+          },
+          "step": {
+            "kind": "tool",
+            "tool": "evidence.quote",
+            "version": "1",
+            "replay": "rerun",
+            "input": {
+              "digest": "sha256:a8c1b8b015afa17492ef6ce4934b5aba56f3b2eff59e34f372dfb973583717bb",
+              "schema": "none"
+            },
+            "output": "none"
+          },
+          "written": [],
+          "skills": [],
+          "lenses": [
+            {
+              "id": "power-resources",
+              "version": "0.1.0",
+              "digest": "sha256:e0ab24f50c8a372e295a283ba4cab449dd247bd4642fded42325ddca349bdab1"
+            }
+          ],
+          "outcome": {
+            "status": "refused",
+            "refusal": {
+              "code": "lens-works-missing",
+              "missing": [
+                "sha256:3e23e8160039594a33894f6564e1b1348bbd7a0088d42c4acb73eeaed59c009d",
+                "sha256:ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb"
+              ]
+            }
+          }
+        },
+        "revisionId": "sha256:131ce4879872e96d18272cdfffc6d15e1fe0803ef34c9742861e46971ccbc384"
+      }
+    },
+    {
+      "name": "refused not shown",
+      "seq": 9,
+      "revision": {
+        "projectId": "project-1",
+        "kind": "receipt",
+        "schema": "receipt@1",
+        "objectId": "receipt-refused-not-shown",
+        "parent": "none",
+        "author": {
+          "voice": "program",
+          "id": "research@2.3.0"
+        },
+        "context": {
+          "run": "run-1",
+          "session": "session-reader-1",
+          "message": "message-1",
+          "call": "call-11",
+          "initiator": {
+            "voice": "agent",
+            "id": "reader"
+          }
+        },
+        "body": {
+          "at": {
+            "started": "2026-11-15T10:11:00Z",
+            "ended": "2026-11-15T10:11:30Z"
+          },
+          "step": {
+            "kind": "tool",
+            "tool": "evidence.quote",
+            "version": "1",
+            "replay": "rerun",
+            "input": {
+              "digest": "sha256:b95af040457fcf29905dca6d12cd4de113e72dcddcfdefb0089af1dbe40e32c9",
+              "schema": "none"
+            },
+            "output": "none"
+          },
+          "written": [],
+          "skills": [],
+          "lenses": [],
+          "outcome": {
+            "status": "refused",
+            "refusal": {
+              "code": "not-shown",
+              "fragment": {
+                "projectId": "project-1",
+                "objectId": "fragment-1",
+                "revisionId": "sha256:e47b80ee854c35a15b8d044c14eb2992077df06f6ee6dade7b14e2ddf20664ef"
+              }
+            }
+          }
+        },
+        "revisionId": "sha256:0b81f36eeaa88645f727c0024c8e6f086e8b86302fc49adec22857e46e2f5575"
+      }
+    },
+    {
+      "name": "refused no match",
+      "seq": 9,
+      "revision": {
+        "projectId": "project-1",
+        "kind": "receipt",
+        "schema": "receipt@1",
+        "objectId": "receipt-refused-no-match",
+        "parent": "none",
+        "author": {
+          "voice": "program",
+          "id": "research@2.3.0"
+        },
+        "context": {
+          "run": "run-1",
+          "session": "session-reader-1",
+          "message": "message-1",
+          "call": "call-12",
+          "initiator": {
+            "voice": "agent",
+            "id": "reader"
+          }
+        },
+        "body": {
+          "at": {
+            "started": "2026-11-15T10:12:00Z",
+            "ended": "2026-11-15T10:12:30Z"
+          },
+          "step": {
+            "kind": "tool",
+            "tool": "evidence.quote",
+            "version": "1",
+            "replay": "rerun",
+            "input": {
+              "digest": "sha256:0b760035b1c753ef8587fbd95ea39767a8329212f4ddd35a2c0155ab19a67e41",
+              "schema": "none"
+            },
+            "output": "none"
+          },
+          "written": [],
+          "skills": [],
+          "lenses": [],
+          "outcome": {
+            "status": "refused",
+            "refusal": {
+              "code": "no-match"
+            }
+          }
+        },
+        "revisionId": "sha256:dac6642531136a27d73f30a65027771356cf6ce3efbe2bd69370f8daa85b83b3"
+      }
+    },
+    {
+      "name": "refused ambiguous match",
+      "seq": 9,
+      "revision": {
+        "projectId": "project-1",
+        "kind": "receipt",
+        "schema": "receipt@1",
+        "objectId": "receipt-refused-ambiguous-match",
+        "parent": "none",
+        "author": {
+          "voice": "program",
+          "id": "research@2.3.0"
+        },
+        "context": {
+          "run": "run-1",
+          "session": "session-reader-1",
+          "message": "message-1",
+          "call": "call-13",
+          "initiator": {
+            "voice": "agent",
+            "id": "reader"
+          }
+        },
+        "body": {
+          "at": {
+            "started": "2026-11-15T10:13:00Z",
+            "ended": "2026-11-15T10:13:30Z"
+          },
+          "step": {
+            "kind": "tool",
+            "tool": "evidence.quote",
+            "version": "1",
+            "replay": "rerun",
+            "input": {
+              "digest": "sha256:8ae76d49b4a7bbb901ad77f6527101c44f7cb2b0718e7a961795d8a6cd65286d",
+              "schema": "none"
+            },
+            "output": "none"
+          },
+          "written": [],
+          "skills": [],
+          "lenses": [],
+          "outcome": {
+            "status": "refused",
+            "refusal": {
+              "code": "ambiguous-match"
+            }
+          }
+        },
+        "revisionId": "sha256:4526db4cdd876aa75d36ed18a1e2a5bc9546302126939a1bfb52e7fed3f7ae4f"
+      }
+    },
+    {
+      "name": "refused refind unresolved",
+      "seq": 9,
+      "revision": {
+        "projectId": "project-1",
+        "kind": "receipt",
+        "schema": "receipt@1",
+        "objectId": "receipt-refused-refind-unresolved",
+        "parent": "none",
+        "author": {
+          "voice": "program",
+          "id": "research@2.3.0"
+        },
+        "context": {
+          "run": "run-1",
+          "session": "session-reader-1",
+          "message": "message-1",
+          "call": "call-14",
+          "initiator": {
+            "voice": "agent",
+            "id": "reader"
+          }
+        },
+        "body": {
+          "at": {
+            "started": "2026-11-15T10:14:00Z",
+            "ended": "2026-11-15T10:14:30Z"
+          },
+          "step": {
+            "kind": "tool",
+            "tool": "evidence.quote",
+            "version": "1",
+            "replay": "rerun",
+            "input": {
+              "digest": "sha256:354d8c981cda9c77abf1db536147bdb90b71e3096b9cc46698977225470509cb",
+              "schema": "none"
+            },
+            "output": "none"
+          },
+          "written": [],
+          "skills": [],
+          "lenses": [],
+          "outcome": {
+            "status": "refused",
+            "refusal": {
+              "code": "refind-unresolved",
+              "fragment": {
+                "projectId": "project-1",
+                "objectId": "fragment-1",
+                "revisionId": "sha256:e47b80ee854c35a15b8d044c14eb2992077df06f6ee6dade7b14e2ddf20664ef"
+              },
+              "against": {
+                "projectId": "project-1",
+                "objectId": "representation-2",
+                "revisionId": "sha256:ae7f9905780228be2fcc2837d46a3f3d191a6c878729f8fc81b9c16c85c8bc55"
+              }
+            }
+          }
+        },
+        "revisionId": "sha256:d111e3d8240ef96b00a839ea6d4fe262bcc0c90291336808b566b7258614970a"
+      }
+    },
+    {
+      "name": "refused refind ambiguous",
+      "seq": 9,
+      "revision": {
+        "projectId": "project-1",
+        "kind": "receipt",
+        "schema": "receipt@1",
+        "objectId": "receipt-refused-refind-ambiguous",
+        "parent": "none",
+        "author": {
+          "voice": "program",
+          "id": "research@2.3.0"
+        },
+        "context": {
+          "run": "run-1",
+          "session": "session-reader-1",
+          "message": "message-1",
+          "call": "call-15",
+          "initiator": {
+            "voice": "agent",
+            "id": "reader"
+          }
+        },
+        "body": {
+          "at": {
+            "started": "2026-11-15T10:15:00Z",
+            "ended": "2026-11-15T10:15:30Z"
+          },
+          "step": {
+            "kind": "tool",
+            "tool": "evidence.quote",
+            "version": "1",
+            "replay": "rerun",
+            "input": {
+              "digest": "sha256:2c3e205a3af8715538e6afeb19d6c7b2452296cad8d28ce499c6a99ba58c2138",
+              "schema": "none"
+            },
+            "output": "none"
+          },
+          "written": [],
+          "skills": [],
+          "lenses": [],
+          "outcome": {
+            "status": "refused",
+            "refusal": {
+              "code": "refind-ambiguous",
+              "fragment": {
+                "projectId": "project-1",
+                "objectId": "fragment-1",
+                "revisionId": "sha256:e47b80ee854c35a15b8d044c14eb2992077df06f6ee6dade7b14e2ddf20664ef"
+              },
+              "against": {
+                "projectId": "project-1",
+                "objectId": "representation-2",
+                "revisionId": "sha256:ae7f9905780228be2fcc2837d46a3f3d191a6c878729f8fc81b9c16c85c8bc55"
+              }
+            }
+          }
+        },
+        "revisionId": "sha256:d25a089985a86cfed747989c02df9a813347a2b4a03d649d5095ec360f68cc3a"
+      }
+    },
+    {
+      "name": "failed",
+      "seq": 9,
+      "revision": {
+        "projectId": "project-1",
+        "kind": "receipt",
+        "schema": "receipt@1",
+        "objectId": "receipt-failed",
+        "parent": "none",
+        "author": {
+          "voice": "program",
+          "id": "research@2.3.0"
+        },
+        "context": {
+          "run": "run-1",
+          "session": "session-reader-1",
+          "message": "message-1",
+          "call": "call-16",
+          "initiator": {
+            "voice": "agent",
+            "id": "reader"
+          }
+        },
+        "body": {
+          "at": {
+            "started": "2026-11-15T10:16:00Z",
+            "ended": "2026-11-15T10:16:30Z"
+          },
+          "step": {
+            "kind": "tool",
+            "tool": "evidence.quote",
+            "version": "1",
+            "replay": "rerun",
+            "input": {
+              "digest": "sha256:5d28a90f4498a81461efbaf6f628a19d9778390bb5c81a393dd936181cc3d826",
+              "schema": "none"
+            },
+            "output": "none"
+          },
+          "written": [],
+          "skills": [],
+          "lenses": [],
+          "outcome": {
+            "status": "failed",
+            "error": "extractor crashed"
+          }
+        },
+        "revisionId": "sha256:802aed2ea0525aec8b66467554ba11458f7b5f0524d88679a8d1113473bc60d3"
+      }
+    },
+    {
+      "name": "receipt command",
+      "seq": 9,
+      "revision": {
+        "projectId": "project-1",
+        "kind": "receipt",
+        "schema": "receipt@1",
+        "objectId": "receipt-command",
+        "parent": "none",
+        "author": {
+          "voice": "program",
+          "id": "research@2.3.0"
+        },
+        "context": "none",
+        "body": {
+          "at": {
+            "started": "2026-11-15T10:17:00Z",
+            "ended": "2026-11-15T10:17:30Z"
+          },
+          "step": {
+            "kind": "command",
+            "command": "research adopt",
+            "input": {
+              "digest": "sha256:448444379404e09e7957468e9977664563a8495fc4214b5fd28fed745e212273",
+              "schema": "none"
+            }
+          },
+          "written": [],
+          "skills": [],
+          "lenses": [],
+          "outcome": {
+            "status": "ok"
+          }
+        },
+        "revisionId": "sha256:3bc066e613c5e0d774f3d2edcb6a6c401d87e2ee57c3072a483512fb936c50c6"
+      }
+    },
+    {
+      "name": "fragment refound",
+      "seq": 10,
+      "revision": {
+        "projectId": "project-1",
+        "kind": "fragment",
+        "schema": "fragment@1",
+        "objectId": "fragment-1",
+        "parent": {
+          "projectId": "project-1",
+          "objectId": "fragment-1",
+          "revisionId": "sha256:e47b80ee854c35a15b8d044c14eb2992077df06f6ee6dade7b14e2ddf20664ef"
+        },
+        "author": {
+          "voice": "program",
+          "id": "research@2.3.0"
+        },
+        "context": {
+          "run": "run-1",
+          "session": "session-reader-1",
+          "message": "message-1",
+          "call": "call-refind",
+          "initiator": {
+            "voice": "agent",
+            "id": "reader"
+          }
+        },
+        "body": {
+          "representation": {
+            "projectId": "project-1",
+            "objectId": "representation-2",
+            "revisionId": "sha256:ae7f9905780228be2fcc2837d46a3f3d191a6c878729f8fc81b9c16c85c8bc55"
+          },
+          "representationDigest": "sha256:66440abf361a3861c3d7774df1560f50302d6e8b456658603fef4a586fad5a33",
+          "selector": {
+            "profile": "utf8-bytes@1",
+            "start": 0,
+            "end": 34,
+            "quote": "Union density fell from 35% to 11%"
+          },
+          "before": "",
+          "after": " between 1979 and 2019.",
+          "page": "none"
+        },
+        "revisionId": "sha256:20d86a2e8b9717730918e61114d8f4a1fbe5eba964ea87e48494d11013e256f7"
+      }
+    },
+    {
+      "name": "snapshot",
+      "seq": 11,
+      "revision": {
+        "projectId": "project-1",
+        "kind": "snapshot",
+        "schema": "snapshot@1",
+        "objectId": "snapshot-1",
+        "parent": "none",
+        "author": {
+          "voice": "program",
+          "id": "research@2.3.0"
+        },
+        "context": {
+          "run": "run-1",
+          "session": "session-research",
+          "message": "message-1",
+          "call": "call-export",
+          "initiator": {
+            "voice": "researcher",
+            "id": "owner"
+          }
+        },
+        "body": {
+          "basisRule": "claim-basis@1",
+          "output": {
+            "projectId": "project-1",
+            "objectId": "artifact-answer",
+            "revisionId": "sha256:8384dd18984383cdbd7e05b02f47a9486e6ee1836c7d2830fc9d4c5df76d0533"
+          },
+          "selected": [
+            {
+              "projectId": "project-1",
+              "objectId": "claim-1",
+              "revisionId": "sha256:83212d5b586600d3e8f11e466e8d4de8794f29aff66707516873a8ebe6c43d82"
+            }
+          ],
+          "asOfSeq": 10,
+          "members": {
+            "basis": [
+              {
+                "projectId": "project-1",
+                "objectId": "claim-1",
+                "revisionId": "sha256:83212d5b586600d3e8f11e466e8d4de8794f29aff66707516873a8ebe6c43d82"
+              },
+              {
+                "projectId": "project-1",
+                "objectId": "evidence-1",
+                "revisionId": "sha256:123546bdb4659d9bf4dfddd123873726f74c9197d22abe531ba07309fbef1ba9"
+              },
+              {
+                "projectId": "project-1",
+                "objectId": "judgment-challenge",
+                "revisionId": "sha256:d0985ab2aea2c655aad9f37cae147349537998ffdb832b2e990abe1a22e18fce"
+              },
+              {
+                "projectId": "project-1",
+                "objectId": "judgment-metadata",
+                "revisionId": "sha256:e186ef07b50e501f690cbdf70cbc13b4fa5ff52d4734bcb3ab53b015b488adb4"
+              },
+              {
+                "projectId": "project-1",
+                "objectId": "judgment-support",
+                "revisionId": "sha256:bf35aea7c32ed676da1672d28c674425d88e53215f839569b15e0eed10c9b920"
+              },
+              {
+                "projectId": "project-1",
+                "objectId": "receipt-claim",
+                "revisionId": "sha256:8bc21f800c42c4e9f67efb3614226b9be1f098282ef257875dcfce15f6b07d76"
+              },
+              {
+                "projectId": "project-1",
+                "objectId": "sha256:1f8024b94f5ea224eb0686232856e616e7dde44fdcad56f6e7731b86e99c6cfa",
+                "revisionId": "sha256:3cb924e6a2095c4d34d658de363822643d1de8e912f2317bf91db0ee46518788"
+              },
+              {
+                "projectId": "project-1",
+                "objectId": "sha256:cc80e958b34ad80675d7eff323b7775a1262ffd34b818604bcf14751b8671f26",
+                "revisionId": "sha256:5644d08bad37b2851c7eb4cb60e7dbe061ba5f95300e5addbf0c1005c3b25072"
+              },
+              {
+                "projectId": "project-1",
+                "objectId": "sha256:e44b6be64902029c4fbe13f81d984d7e807d67d199ed3df00ba9b438e6bec57d",
+                "revisionId": "sha256:3a2b1df9549af08a807fe486424e55b288517f0586065cae491f560ebff03962"
+              }
+            ],
+            "closureCount": 14
+          }
+        },
+        "revisionId": "sha256:427353ff453b72d06ca2c85261bbdbfdbe618d346a59a12f2582b3be3939a8a7"
+      }
+    }
+  ],
+  "fragments": [
+    {
+      "name": "the cited quote",
+      "text": "Union density fell from 35% to 11% between 1979 and 2019. Wage inequality rose — façade naïveté ✓.",
+      "representationDigest": "sha256:e218bacb332b9d6e385b74fd5b768c45632d9f69dcb0f56449dbc17952f85a50",
+      "selector": {
+        "profile": "utf8-bytes@1",
+        "start": 0,
+        "end": 34,
+        "quote": "Union density fell from 35% to 11%"
+      },
+      "result": "ok"
+    },
+    {
+      "name": "a multibyte quote",
+      "text": "Union density fell from 35% to 11% between 1979 and 2019. Wage inequality rose — façade naïveté ✓.",
+      "representationDigest": "sha256:e218bacb332b9d6e385b74fd5b768c45632d9f69dcb0f56449dbc17952f85a50",
+      "selector": {
+        "profile": "utf8-bytes@1",
+        "start": 83,
+        "end": 104,
+        "quote": "façade naïveté ✓"
+      },
+      "result": "ok"
+    },
+    {
+      "name": "one byte off",
+      "text": "Union density fell from 35% to 11% between 1979 and 2019. Wage inequality rose — façade naïveté ✓.",
+      "representationDigest": "sha256:e218bacb332b9d6e385b74fd5b768c45632d9f69dcb0f56449dbc17952f85a50",
+      "selector": {
+        "profile": "utf8-bytes@1",
+        "start": 1,
+        "end": 35,
+        "quote": "Union density fell from 35% to 11%"
+      },
+      "result": "selector-mismatch"
+    },
+    {
+      "name": "inside a code point",
+      "text": "Union density fell from 35% to 11% between 1979 and 2019. Wage inequality rose — façade naïveté ✓.",
+      "representationDigest": "sha256:e218bacb332b9d6e385b74fd5b768c45632d9f69dcb0f56449dbc17952f85a50",
+      "selector": {
+        "profile": "utf8-bytes@1",
+        "start": 86,
+        "end": 87,
+        "quote": "a"
+      },
+      "result": "selector-mismatch"
+    },
+    {
+      "name": "a normalized quote is not the stored bytes",
+      "text": "Union density fell from 35% to 11% between 1979 and 2019. Wage inequality rose — façade naïveté ✓.",
+      "representationDigest": "sha256:e218bacb332b9d6e385b74fd5b768c45632d9f69dcb0f56449dbc17952f85a50",
+      "selector": {
+        "profile": "utf8-bytes@1",
+        "start": 83,
+        "end": 104,
+        "quote": "facade naivete ✓"
+      },
+      "result": "selector-mismatch"
+    },
+    {
+      "name": "the wrong text",
+      "text": "Union density fell from 35% to 11% between 1979 and 2019.\nWage inequality rose.",
+      "representationDigest": "sha256:e218bacb332b9d6e385b74fd5b768c45632d9f69dcb0f56449dbc17952f85a50",
+      "selector": {
+        "profile": "utf8-bytes@1",
+        "start": 0,
+        "end": 34,
+        "quote": "Union density fell from 35% to 11%"
+      },
+      "result": "digest-mismatch"
+    },
+    {
+      "name": "another profile",
+      "text": "Union density fell from 35% to 11% between 1979 and 2019. Wage inequality rose — façade naïveté ✓.",
+      "representationDigest": "sha256:e218bacb332b9d6e385b74fd5b768c45632d9f69dcb0f56449dbc17952f85a50",
+      "selector": {
+        "profile": "utf16@1",
+        "start": 0,
+        "end": 34,
+        "quote": "Union density fell from 35% to 11%"
+      },
+      "result": "selector-mismatch"
+    },
+    {
+      "name": "a negative offset",
+      "text": "Union density fell from 35% to 11% between 1979 and 2019. Wage inequality rose — façade naïveté ✓.",
+      "representationDigest": "sha256:e218bacb332b9d6e385b74fd5b768c45632d9f69dcb0f56449dbc17952f85a50",
+      "selector": {
+        "profile": "utf8-bytes@1",
+        "start": -1,
+        "end": 34,
+        "quote": "Union density fell from 35% to 11%"
+      },
+      "result": "selector-mismatch"
+    },
+    {
+      "name": "a fractional offset",
+      "text": "Union density fell from 35% to 11% between 1979 and 2019. Wage inequality rose — façade naïveté ✓.",
+      "representationDigest": "sha256:e218bacb332b9d6e385b74fd5b768c45632d9f69dcb0f56449dbc17952f85a50",
+      "selector": {
+        "profile": "utf8-bytes@1",
+        "start": 0,
+        "end": 33.5,
+        "quote": "Union density fell from 35% to 11%"
+      },
+      "result": "selector-mismatch"
+    },
+    {
+      "name": "a lone surrogate in the quote",
+      "text": "Union density fell from 35% to 11% between 1979 and 2019. Wage inequality rose — façade naïveté ✓.",
+      "representationDigest": "sha256:e218bacb332b9d6e385b74fd5b768c45632d9f69dcb0f56449dbc17952f85a50",
+      "selector": {
+        "profile": "utf8-bytes@1",
+        "start": 0,
+        "end": 3,
+        "quote": "\ud800"
+      },
+      "result": "selector-mismatch"
+    },
+    {
+      "name": "an extra selector field",
+      "text": "Union density fell from 35% to 11% between 1979 and 2019. Wage inequality rose — façade naïveté ✓.",
+      "representationDigest": "sha256:e218bacb332b9d6e385b74fd5b768c45632d9f69dcb0f56449dbc17952f85a50",
+      "selector": {
+        "profile": "utf8-bytes@1",
+        "start": 0,
+        "end": 34,
+        "quote": "Union density fell from 35% to 11%",
+        "page": 1
+      },
+      "result": "selector-mismatch"
+    }
+  ],
+  "refusals": [
+    {
+      "name": "an edited body under the old id",
+      "revision": {
+        "projectId": "project-1",
+        "kind": "claim",
+        "schema": "claim@1",
+        "objectId": "claim-1",
+        "parent": "none",
+        "author": {
+          "voice": "agent",
+          "id": "reader"
+        },
+        "context": {
+          "run": "run-1",
+          "session": "session-reader-1",
+          "message": "message-1",
+          "call": "call-claim",
+          "initiator": {
+            "voice": "agent",
+            "id": "reader"
+          }
+        },
+        "body": {
+          "text": "Edited.",
+          "scope": "Private and public sectors combined",
+          "addresses": {
+            "protocol": {
+              "projectId": "project-1",
+              "objectId": "protocol-1",
+              "revisionId": "sha256:63a785269e723151f572dbec642b69a1a00eabc4efffe54036bb2228afda6afb"
+            },
+            "subquestion": "sq-1"
+          }
+        },
+        "revisionId": "sha256:83212d5b586600d3e8f11e466e8d4de8794f29aff66707516873a8ebe6c43d82"
+      },
+      "code": "digest-mismatch"
+    },
+    {
+      "name": "an extra envelope field",
+      "revision": {
+        "projectId": "project-1",
+        "kind": "claim",
+        "schema": "claim@1",
+        "objectId": "claim-1",
+        "parent": "none",
+        "author": {
+          "voice": "agent",
+          "id": "reader"
+        },
+        "context": {
+          "run": "run-1",
+          "session": "session-reader-1",
+          "message": "message-1",
+          "call": "call-claim",
+          "initiator": {
+            "voice": "agent",
+            "id": "reader"
+          }
+        },
+        "body": {
+          "text": "US union density fell from 35% to 11% between 1979 and 2019.",
+          "scope": "Private and public sectors combined",
+          "addresses": {
+            "protocol": {
+              "projectId": "project-1",
+              "objectId": "protocol-1",
+              "revisionId": "sha256:63a785269e723151f572dbec642b69a1a00eabc4efffe54036bb2228afda6afb"
+            },
+            "subquestion": "sq-1"
+          }
+        },
+        "extra": 1,
+        "revisionId": "sha256:96ecf397201c93c4fe2233f59e2964fa5d9f029961a74dbe47b2fa7d7a1a3dd0"
+      },
+      "code": "invalid-record"
+    },
+    {
+      "name": "an unknown kind",
+      "revision": {
+        "projectId": "project-1",
+        "kind": "statement",
+        "schema": "statement@1",
+        "objectId": "claim-1",
+        "parent": "none",
+        "author": {
+          "voice": "agent",
+          "id": "reader"
+        },
+        "context": {
+          "run": "run-1",
+          "session": "session-reader-1",
+          "message": "message-1",
+          "call": "call-claim",
+          "initiator": {
+            "voice": "agent",
+            "id": "reader"
+          }
+        },
+        "body": {
+          "text": "US union density fell from 35% to 11% between 1979 and 2019.",
+          "scope": "Private and public sectors combined",
+          "addresses": {
+            "protocol": {
+              "projectId": "project-1",
+              "objectId": "protocol-1",
+              "revisionId": "sha256:63a785269e723151f572dbec642b69a1a00eabc4efffe54036bb2228afda6afb"
+            },
+            "subquestion": "sq-1"
+          }
+        },
+        "revisionId": "sha256:e19237c96fd1bf0ba24886f73768539d61350f3517fc07fb60c89ec2efc2aa98"
+      },
+      "code": "invalid-record"
+    },
+    {
+      "name": "a later schema",
+      "revision": {
+        "projectId": "project-1",
+        "kind": "claim",
+        "schema": "claim@2",
+        "objectId": "claim-1",
+        "parent": "none",
+        "author": {
+          "voice": "agent",
+          "id": "reader"
+        },
+        "context": {
+          "run": "run-1",
+          "session": "session-reader-1",
+          "message": "message-1",
+          "call": "call-claim",
+          "initiator": {
+            "voice": "agent",
+            "id": "reader"
+          }
+        },
+        "body": {
+          "text": "US union density fell from 35% to 11% between 1979 and 2019.",
+          "scope": "Private and public sectors combined",
+          "addresses": {
+            "protocol": {
+              "projectId": "project-1",
+              "objectId": "protocol-1",
+              "revisionId": "sha256:63a785269e723151f572dbec642b69a1a00eabc4efffe54036bb2228afda6afb"
+            },
+            "subquestion": "sq-1"
+          }
+        },
+        "revisionId": "sha256:73afcada1e446e04f52dd0561cead9d54e9b1cfd365f3c2d259d391514c1b5d5"
+      },
+      "code": "unsupported-schema"
+    },
+    {
+      "name": "a program claim",
+      "revision": {
+        "projectId": "project-1",
+        "kind": "claim",
+        "schema": "claim@1",
+        "objectId": "claim-1",
+        "parent": "none",
+        "author": {
+          "voice": "program",
+          "id": "research"
+        },
+        "context": {
+          "run": "run-1",
+          "session": "session-reader-1",
+          "message": "message-1",
+          "call": "call-claim",
+          "initiator": {
+            "voice": "agent",
+            "id": "reader"
+          }
+        },
+        "body": {
+          "text": "US union density fell from 35% to 11% between 1979 and 2019.",
+          "scope": "Private and public sectors combined",
+          "addresses": {
+            "protocol": {
+              "projectId": "project-1",
+              "objectId": "protocol-1",
+              "revisionId": "sha256:63a785269e723151f572dbec642b69a1a00eabc4efffe54036bb2228afda6afb"
+            },
+            "subquestion": "sq-1"
+          }
+        },
+        "revisionId": "sha256:55675d1b493e615f2aa7b63c82068b0703adc2fb6b5bb5bf0cc9c572c35a3e43"
+      },
+      "code": "invalid-author"
+    },
+    {
+      "name": "an agent's decision",
+      "revision": {
+        "projectId": "project-1",
+        "kind": "decision",
+        "schema": "decision@1",
+        "objectId": "sha256:e44b6be64902029c4fbe13f81d984d7e807d67d199ed3df00ba9b438e6bec57d",
+        "parent": "none",
+        "author": {
+          "voice": "agent",
+          "id": "reader"
+        },
+        "context": "none",
+        "body": {
+          "type": "adoption",
+          "reason": "",
+          "attestation": {
+            "level": "tty",
+            "surface": "cli"
+          },
+          "claim": {
+            "projectId": "project-1",
+            "objectId": "claim-1",
+            "revisionId": "sha256:83212d5b586600d3e8f11e466e8d4de8794f29aff66707516873a8ebe6c43d82"
+          },
+          "evidence": [
+            {
+              "projectId": "project-1",
+              "objectId": "evidence-1",
+              "revisionId": "sha256:123546bdb4659d9bf4dfddd123873726f74c9197d22abe531ba07309fbef1ba9"
+            }
+          ],
+          "ruling": "adopt"
+        },
+        "revisionId": "sha256:a5d0cfec343422878a43255392481bc094938c0b4d70e68819e20e2f335a7063"
+      },
+      "code": "invalid-author"
+    }
+  ],
+  "skills": [
+    {
+      "name": "one file",
+      "files": {
+        "SKILL.md": "# search-strategy\n"
+      },
+      "digest": "sha256:ca86e0096d5e7fba4102a132a72bc9645ae1bbba7cf5cf842f108b51b38d73ae"
+    },
+    {
+      "name": "two files",
+      "files": {
+        "SKILL.md": "# read-and-quote\n",
+        "examples.md": "example\n"
+      },
+      "digest": "sha256:3cb602e009f9180c2eb1e7e9031eb886203ab2a8d3c3cade925f2b797123ccae"
+    }
+  ]
+}

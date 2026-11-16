@@ -621,6 +621,19 @@
         "typescript": "catalog:",
       },
     },
+    "packages/research-record": {
+      "name": "@opencode/research-record",
+      "version": "2.3.0",
+      "dependencies": {
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@tsconfig/bun": "catalog:",
+        "@types/bun": "catalog:",
+        "@typescript/native": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
     "packages/schema": {
       "name": "@opencode/schema",
       "version": "2.3.0",
@@ -1867,6 +1880,8 @@
     "@opencode/pty-win32-x64": ["@opencode/pty-win32-x64@0.5.2", "", { "os": "win32", "cpu": "x64" }, "sha512-hXdQWx+gHhQMRovDS3Fm0n4LuvSgLxRqEdicpVQzjjCTPYBMSBysWYRheQ2ydZlP0GCQ2Ymoi0dixgAHTYHO8A=="],
 
     "@opencode/research": ["@opencode/research@workspace:packages/research"],
+
+    "@opencode/research-record": ["@opencode/research-record@workspace:packages/research-record"],
 
     "@opencode/schema": ["@opencode/schema@workspace:packages/schema"],
 
