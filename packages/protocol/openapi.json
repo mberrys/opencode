@@ -16680,9 +16680,6 @@
               "research": {
                 "type": "boolean"
               },
-              "research": {
-                "type": "boolean"
-              },
               "live_delivery": {
                 "type": "boolean"
               },
