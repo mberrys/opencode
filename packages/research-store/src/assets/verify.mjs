@@ -208,6 +208,16 @@ for (const [id, record] of byId) readable(id, () => {
     else if (found.kind !== target.kind) fail("ref", short(id), target.kind + ":" + short(target.id) + " names a " + found.kind)
   }
 })
+// Each run's receipts are numbered 1, 2, 3 in log order, so a repeat or a gap means a step was lost or forged.
+const positions = new Map()
+for (const record of records) {
+  if (record.kind !== "receipt" || record.body === null || typeof record.body !== "object") continue
+  const position = (positions.get(record.body.run) ?? 0) + 1
+  positions.set(record.body.run, position)
+  if (record.body.seq !== position)
+    fail("receipt.seq", short(digestOf(record)), "receipt " + record.body.seq + " of " + record.body.run + " stands at position " + position)
+}
+
 // A first revision names its object by its own content; a later one keeps the object of the revision it replaces.
 for (const [id, record] of byId) readable(id, () => {
   if (!record.parent) {
@@ -309,15 +319,25 @@ for (const [id, record] of byId) readable(id, () => {
   }
   const passages = shownPassages(record.session)
   const texts = passages.get(fragment.body.address) ?? []
-  if (!texts.some((body) => body.includes(fragment.body.quote)) && !wasCutInSession(record.session, record.body.target.fragment.id))
+  const cited = byId.get(record.body.claim?.id)
+  const run = cited?.kind === "claim" ? cited.body.run : undefined
+  const quote = escapeMarkers(fragment.body.quote)
+  if (!texts.some((body) => body.includes(quote)) && !wasCutInSession(record.session, record.body.target.fragment.id, run))
     fail("evidence.shown", short(id), "the fragment was never shown to that session")
 })
 
-function wasCutInSession(session, fragmentID) {
+// Passage text is stored with every marker opening broken by a word joiner, so a quote is compared the same way.
+function escapeMarkers(text) {
+  return text.replace(/\[(\/?)research:/g, "[$1research\u2060:")
+}
+
+// The receipt must be in the run the citing claim belongs to, as evidence.claim requires.
+function wasCutInSession(session, fragmentID, run) {
   return records.some(
     (candidate) =>
       candidate.kind === "receipt" &&
       candidate.session === session &&
+      (run === undefined || candidate.body.run === run) &&
       (candidate.body.records ?? []).some((written) => written.kind === "fragment" && written.id === fragmentID),
   )
 }

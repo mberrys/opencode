@@ -1,6 +1,7 @@
 import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, writeSync } from "node:fs"
 import { join } from "node:path"
 import { type Digest, digestBytes, hex, isDigest } from "@opencode/research-record"
+import { failpoint } from "./failpoint.js"
 
 /** Content addressed bytes: a file is named by its digest and is never rewritten. */
 export class Blobs {
@@ -32,6 +33,7 @@ export class Blobs {
     } finally {
       closeSync(handle)
     }
+    failpoint("blob.before-rename")
     renameSync(temporary, target)
     return digest
   }

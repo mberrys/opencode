@@ -15,6 +15,7 @@ import {
   recordId,
 } from "@opencode/research-record"
 import { Blobs } from "./blob.js"
+import { failpoint } from "./failpoint.js"
 
 export interface CommitBody {
   readonly seq: number
@@ -107,7 +108,7 @@ export class Store {
     // An immediate transaction takes the write lock up front, so a second writer waits out busy_timeout instead
     // of failing the moment a deferred transaction tries to upgrade its read snapshot. The transaction wrapper
     // also rolls back when the COMMIT itself fails, so the connection is never left inside a transaction.
-    return this.database
+    const result = this.database
       .transaction((): CommitResult => {
         const previous = this.head()
         const seq = previous ? previous.seq + 1 : 1
@@ -128,9 +129,20 @@ export class Store {
         this.database
           .query("INSERT INTO commit_log (seq, at, prev, digest, body) VALUES (?, ?, ?, ?, ?)")
           .run(seq, at, body.prev, commitDigest, canonical(body as never))
+        failpoint("commit.before-commit")
         return { seq, digest: commitDigest, ids }
       })
       .immediate()
+    failpoint("commit.after-commit")
+    return result
+  }
+
+  /**
+   * Runs `work` under the write lock as one transaction. Commits inside it become savepoints, so they land
+   * together or not at all, and anything read inside it (a sequence number, the head) cannot change underneath.
+   */
+  atomic<T>(work: () => T): T {
+    return this.database.transaction(work).immediate()
   }
 
   commits(): CommitRow[] {

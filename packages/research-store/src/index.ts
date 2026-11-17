@@ -1,4 +1,5 @@
 export { Blobs } from "./blob.js"
+export { failpoint } from "./failpoint.js"
 export { Store } from "./store.js"
 export type { CommitBody, CommitResult, CommitRow } from "./store.js"
 export { missingCitationFields, referencedBlobs, refsOf, verify } from "./verify.js"

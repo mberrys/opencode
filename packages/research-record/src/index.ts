@@ -65,5 +65,5 @@ export type { Address, Check, CutInput, VerificationFailure } from "./fragment.j
 export { deriveTier, TIERS } from "./tier.js"
 export type { Qualifier, Tier, TierInput, TierResult } from "./tier.js"
 
-export { MARKER_PREFIX, deriveShownSet, parsePassages, wasShown, wrapPassage, wrapPassages } from "./shown.js"
+export { MARKER_PREFIX, deriveShownSet, escapeMarkers, parsePassages, wasShown, wrapPassage, wrapPassages } from "./shown.js"
 export type { ModelCallContent, Passage, ShownSet } from "./shown.js"

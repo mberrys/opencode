@@ -9,7 +9,16 @@ export interface Passage {
 export const MARKER_PREFIX = "research:"
 
 export function wrapPassage(passage: Passage): string {
-  return `[${MARKER_PREFIX}${passage.address}]${passage.text}[/${MARKER_PREFIX}${passage.address}]`
+  return `[${MARKER_PREFIX}${passage.address}]${escapeMarkers(passage.text)}[/${MARKER_PREFIX}${passage.address}]`
+}
+
+/**
+ * Breaks every marker opening in document text with a word joiner, so no text a document carries can close the
+ * passage it sits in or open one under another address. The shown set holds the escaped text, and a quote is
+ * escaped the same way before it is looked for there; the bundle verifier does the same.
+ */
+export function escapeMarkers(text: string): string {
+  return text.replace(/\[(\/?)research:/g, "[$1research\u2060:")
 }
 
 export function wrapPassages(passages: readonly Passage[]): string {
@@ -62,5 +71,6 @@ export function deriveShownSet(input: {
 export function wasShown(set: ShownSet, fragment: FragmentBody): boolean {
   const texts = set.passages.get(fragment.address)
   if (!texts) return false
-  return texts.some((text) => text.includes(fragment.quote))
+  const quote = escapeMarkers(fragment.quote)
+  return texts.some((text) => text.includes(quote))
 }

@@ -23,6 +23,7 @@ export type CheckName =
   | "log.seq"
   | "record.contract"
   | "record.object"
+  | "receipt.seq"
   | "record.id"
   | "record.index"
   | "ref"
@@ -131,6 +132,16 @@ export function verify(store: Store): VerifyReport {
     }
   }
 
+  // Each run's receipts are numbered 1, 2, 3 in log order, so a repeat or a gap means a step was lost or forged.
+  const positions = new Map<string, number>()
+  for (const record of records) {
+    if (record.kind !== "receipt") continue
+    const position = (positions.get(record.body.run) ?? 0) + 1
+    positions.set(record.body.run, position)
+    if (record.body.seq !== position)
+      issue(issues, "receipt.seq", short(recordId(record)), `receipt ${record.body.seq} of ${record.body.run} stands at position ${position}`)
+  }
+
   // A first revision names its object by its own content; a later one keeps the object of the revision it replaces.
   for (const record of records) {
     const id = short(recordId(record))
@@ -168,12 +179,14 @@ export function verify(store: Store): VerifyReport {
   }
 
   const shown = new Map<string, ReturnType<Store["shownSet"]>>()
-  // A receipt that recorded the fragment proves this session cut it; the model-call set is the stronger check.
-  const cutInSession = (session: string, fragment: { id: string }) =>
+  // A receipt that recorded the fragment proves this session cut it, in the run the citing claim belongs to, as
+  // evidence.claim requires; the model-call set is the stronger check.
+  const cutInSession = (session: string, fragment: { id: string }, run: string | undefined) =>
     records.some(
       (record) =>
         record.kind === "receipt" &&
         record.session === session &&
+        (run === undefined || record.body.run === run) &&
         record.body.records.some((written) => written.kind === "fragment" && written.id === fragment.id),
     )
   for (const record of records) {
@@ -198,7 +211,9 @@ export function verify(store: Store): VerifyReport {
       }
       shown.set(record.session, set)
     }
-    if (!wasShown(set, fragment.body as FragmentBody) && !cutInSession(record.session, refOf(fragment))) {
+    const cited = ids.get(record.body.claim.id)
+    const run = cited?.kind === "claim" ? cited.body.run : undefined
+    if (!wasShown(set, fragment.body as FragmentBody) && !cutInSession(record.session, refOf(fragment), run)) {
       issue(issues, "evidence.shown", short(recordId(record)), "the fragment was never shown to that session")
     }
   }

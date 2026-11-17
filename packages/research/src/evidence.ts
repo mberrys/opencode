@@ -12,7 +12,7 @@ import {
   refOf,
 } from "@opencode/research-record"
 import type { Store } from "@opencode/research-store"
-import { replay, verify } from "@opencode/research-store"
+import { failpoint, replay, verify } from "@opencode/research-store"
 import type { ResearchRecord } from "@opencode/research-record"
 import { cites, entryOfShort, grep, latest, outline, read, search } from "@opencode/research-library"
 import { type ClaimRecord, resolveRun, shownToSession, tierOf } from "./tier.js"
@@ -189,27 +189,29 @@ export interface GapInput {
 export function gap(ctx: Session, input: GapInput): { receipt: Ref } {
   if (input.searched.length === 0) throw new Error("a gap states what was searched, where, and when")
   if (!input.howToClose.trim()) throw new Error("a gap states how to close it")
-  const at = new Date().toISOString()
-  const run = runOf(ctx)
-  const receipt = makeRecord({
-    kind: "receipt",
-    at,
-    author: { voice: "program" },
-    session: ctx.session,
-    body: {
-      run,
-      seq: nextSeq(ctx.store, run),
-      operation: { kind: "tool", tool: "evidence.gap", input: input as unknown as Json },
-      inputs: [],
-      output: digest(input as unknown as Json),
-      records: [],
-      startedAt: at,
-      endedAt: at,
-      ok: true,
-    },
+  return ctx.store.atomic(() => {
+    const at = new Date().toISOString()
+    const run = runOf(ctx)
+    const receipt = makeRecord({
+      kind: "receipt",
+      at,
+      author: { voice: "program" },
+      session: ctx.session,
+      body: {
+        run,
+        seq: nextSeq(ctx.store, run),
+        operation: { kind: "tool", tool: "evidence.gap", input: input as unknown as Json },
+        inputs: [],
+        output: digest(input as unknown as Json),
+        records: [],
+        startedAt: at,
+        endedAt: at,
+        ok: true,
+      },
+    })
+    ctx.store.commit([receipt], { at })
+    return { receipt: refOf(receipt) }
   })
-  ctx.store.commit([receipt], { at })
-  return { receipt: refOf(receipt) }
 }
 
 export function gapsOf(store: Store, run: string): GapInput[] {
@@ -228,10 +230,14 @@ export interface DecisionResult {
   readonly ruling: "adopt" | "reject"
 }
 
-export function decide(ctx: Session, input: { target: string; ruling: "adopt" | "reject"; reason?: string }): DecisionResult {
+export function decide(
+  ctx: Session,
+  input: { target: string; ruling: "adopt" | "reject"; reason?: string },
+): DecisionResult {
   if (ctx.actor.voice !== "researcher") throw new Error("adopting and rejecting belong to the researcher")
   const target = ctx.store.resolve(input.target)
-  if (target.kind !== "claim") throw new Error(`${formatRef(target)} is not a claim; only a claim is adopted or rejected`)
+  if (target.kind !== "claim")
+    throw new Error(`${formatRef(target)} is not a claim; only a claim is adopted or rejected`)
   const at = new Date().toISOString()
   const decision = makeRecord({
     kind: "decision",
@@ -240,11 +246,17 @@ export function decide(ctx: Session, input: { target: string; ruling: "adopt" | 
     session: ctx.session,
     body: { target, ruling: input.ruling, ...(input.reason ? { reason: input.reason } : {}) },
   })
-  return record(ctx, `research.${input.ruling}`, { target: input.target, ruling: input.ruling } as Json, [decision], () => ({
-    decision: refOf(decision),
-    target,
-    ruling: input.ruling,
-  }))
+  return record(
+    ctx,
+    `research.${input.ruling}`,
+    { target: input.target, ruling: input.ruling } as Json,
+    [decision],
+    () => ({
+      decision: refOf(decision),
+      target,
+      ruling: input.ruling,
+    }),
+  )
 }
 
 export interface VerifyResult {
@@ -255,30 +267,32 @@ export interface VerifyResult {
 export function check(ctx: Session, run = ctx.run): VerifyResult {
   const record = verify(ctx.store)
   const replayed = replay(ctx.store, run, { execute: replayLibrary(ctx.store) })
-  const at = new Date().toISOString()
-  const receipt = makeRecord({
-    kind: "receipt",
-    at,
-    author: { voice: "program" },
-    session: ctx.session,
-    body: {
-      run,
-      seq: nextSeq(ctx.store, run),
-      operation: { kind: "tool", tool: "evidence.verify", input: { run } as Json },
-      inputs: [],
-      output: digest({
+  ctx.store.atomic(() => {
+    const at = new Date().toISOString()
+    const receipt = makeRecord({
+      kind: "receipt",
+      at,
+      author: { voice: "program" },
+      session: ctx.session,
+      body: {
+        run,
+        seq: nextSeq(ctx.store, run),
+        operation: { kind: "tool", tool: "evidence.verify", input: { run } as Json },
+        inputs: [],
+        output: digest({
+          ok: record.ok,
+          issues: record.issues.length,
+          replay: { ok: replayed.ok, entries: replayed.entries.length, unverifiable: replayed.unverifiable },
+        } as Json),
+        records: [],
+        startedAt: at,
+        endedAt: at,
+        // Replay is reported beside the record, not folded into whether the record verifies.
         ok: record.ok,
-        issues: record.issues.length,
-        replay: { ok: replayed.ok, entries: replayed.entries.length, unverifiable: replayed.unverifiable },
-      } as Json),
-      records: [],
-      startedAt: at,
-      endedAt: at,
-      // Replay is reported beside the record, not folded into whether the record verifies.
-      ok: record.ok,
-    },
+      },
+    })
+    ctx.store.commit([receipt], { at })
   })
-  ctx.store.commit([receipt], { at })
   return { record, replay: replayed }
 }
 
@@ -331,33 +345,47 @@ export function nextSeq(store: Store, run: string): number {
   return store.kind("receipt").filter((receipt) => receipt.body.run === run).length + 1
 }
 
-export function record<T>(ctx: Session, tool: string, input: Json, records: readonly ResearchRecord[], build: () => T): T {
-  const startedAt = new Date().toISOString()
-  // The records are the durable facts, so they land before the result is read back from them.
-  if (records.length > 0) ctx.store.commit(records, { at: startedAt })
-  const result = build()
-  const endedAt = new Date().toISOString()
-  // Resolved after the records land: a protocol written just above starts the run this receipt belongs to.
-  const run = runOf(ctx)
-  const receipt = makeRecord({
-    kind: "receipt",
-    at: endedAt,
-    author: { voice: "program" },
-    session: ctx.session,
-    body: {
-      run,
-      seq: nextSeq(ctx.store, run),
-      operation: { kind: "tool", tool, input },
-      inputs: [],
-      output: digest(result as Json),
-      records: records.map(refOf),
-      startedAt,
-      endedAt,
-      ok: true,
-    },
+/**
+ * Commits a tool's records and its receipt as one transaction under the write lock. A failure anywhere, including
+ * a crash, leaves neither, and the receipt's number is read and used under the same lock, so two processes
+ * writing to one run cannot take the same one.
+ */
+export function record<T>(
+  ctx: Session,
+  tool: string,
+  input: Json,
+  records: readonly ResearchRecord[],
+  build: () => T,
+): T {
+  return ctx.store.atomic(() => {
+    const startedAt = new Date().toISOString()
+    // The records land first, inside the transaction, so the result can be read back from them.
+    if (records.length > 0) ctx.store.commit(records, { at: startedAt })
+    const result = build()
+    failpoint("record.before-receipt")
+    const endedAt = new Date().toISOString()
+    // Resolved after the records land: a protocol written just above starts the run this receipt belongs to.
+    const run = runOf(ctx)
+    const receipt = makeRecord({
+      kind: "receipt",
+      at: endedAt,
+      author: { voice: "program" },
+      session: ctx.session,
+      body: {
+        run,
+        seq: nextSeq(ctx.store, run),
+        operation: { kind: "tool", tool, input },
+        inputs: [],
+        output: digest(result as Json),
+        records: records.map(refOf),
+        startedAt,
+        endedAt,
+        ok: true,
+      },
+    })
+    ctx.store.commit([receipt], { at: endedAt })
+    return result
   })
-  ctx.store.commit([receipt], { at: endedAt })
-  return result
 }
 
 function latestAt(store: Store, address: string) {
@@ -380,7 +408,12 @@ function sourceOf(store: Store, fragment: Ref): { ref: Ref; title: string; citat
   return { ref: refOf(source), title: source.body.csl.title, citation: shortCitation(source.body.csl) }
 }
 
-function shortCitation(csl: { author?: readonly { family: string }[]; issued?: { "date-parts": readonly (readonly number[])[] }; title: string; container?: string }): string {
+function shortCitation(csl: {
+  author?: readonly { family: string }[]
+  issued?: { "date-parts": readonly (readonly number[])[] }
+  title: string
+  container?: string
+}): string {
   const author = csl.author?.[0]?.family ?? "Anonymous"
   const year = csl.issued?.["date-parts"]?.[0]?.[0] ?? "n.d."
   return `${author} ${year}`
