@@ -69,7 +69,12 @@ interface Sent {
  */
 const run = Effect.fnUntraced(function* (
   seed?: Delivery.State,
-  options: { context?: () => ReadonlyArray<SessionMessage.Info>; missing?: boolean } = {},
+  options: {
+    context?: () => ReadonlyArray<SessionMessage.Info>
+    missing?: boolean
+    // Runs while a message is being sent, before it is recorded.
+    sending?: () => Effect.Effect<void>
+  } = {},
 ) {
   const stored = new Map<string, Schema.Json>(seed ? [[`session:${sessionID}`, seed]] : [])
   const changed: unknown[] = []
@@ -85,7 +90,8 @@ const run = Effect.fnUntraced(function* (
         hook: ((name: string, handler: (event: SessionIdle) => Effect.Effect<void>) =>
           Effect.sync(() => void hooks.set(name, handler))) as never,
         context: () => Effect.sync(() => options.context?.() ?? []) as never,
-        synthetic: (input) => Effect.sync(() => void sent.push(input)) as never,
+        synthetic: (input) =>
+          (options.sending?.() ?? Effect.void).pipe(Effect.andThen(Effect.sync(() => void sent.push(input)))) as never,
         // SAFETY: the startup sweep only checks that the Session exists.
         get: (input) =>
           options.missing ? Effect.fail(new Error("not found")) : (Effect.succeed({ id: input.sessionID }) as never),
@@ -180,7 +186,10 @@ describe("delivery plugin", () => {
         wrapUpSent: true,
       })
       expect(plugin.delivery()).toEqual(stopped)
-      expect(plugin.changed).toEqual([{ sessionID, delivery: stopped }])
+      expect(plugin.changed).toEqual([
+        { sessionID, delivery: { ...stopped, wrapUpSent: undefined } },
+        { sessionID, delivery: stopped },
+      ])
       expect(plugin.sent).toEqual([
         {
           sessionID,
@@ -191,6 +200,31 @@ describe("delivery plugin", () => {
         },
       ])
     }),
+  )
+
+  it.effect(
+    "tells the agent again, rather than finishing the delivery, when it goes idle while the wrap-up is sent",
+    () =>
+      Effect.gen(function* () {
+        let idled = false
+        let plugin: Effect.Success<ReturnType<typeof run>> | undefined
+        plugin = yield* run(active, {
+          sending: () =>
+            Effect.suspend(() => {
+              if (idled || !plugin) return Effect.void
+              idled = true
+              return plugin.idle()
+            }),
+        })
+
+        yield* plugin.stop()
+
+        expect(plugin.delivery()).toMatchObject({ status: "stopping", stoppedBy: "user", wrapUpSent: true })
+        expect(plugin.sent.map((message) => message.text)).toEqual([
+          expect.stringContaining("The live delivery is wrapping up"),
+          expect.stringContaining("The live delivery is wrapping up"),
+        ])
+      }),
   )
 
   it.effect("leaves a stopping delivery as it is when stopped again", () =>

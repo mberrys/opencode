@@ -58,7 +58,6 @@ export const Plugin = define({
               status: "stopping",
               stoppedBy: "user",
               reason: "Stopped by the user",
-              wrapUpSent: true,
               updatedAt: yield* Clock.currentTimeMillis,
             }
             yield* write(sessionID, next)
@@ -67,7 +66,8 @@ export const Plugin = define({
               { sessionID, text: wrapUp(next), description: "Live delivery: wrapping up", resume: true },
               next,
             )
-            return next
+            yield* markWrapUpSent(sessionID, next)
+            return (yield* read(sessionID)) ?? next
           }),
         extend: (input, call) =>
           Effect.gen(function* () {
@@ -158,7 +158,6 @@ export const Plugin = define({
         status: "stopping",
         stoppedBy,
         reason,
-        wrapUpSent: true,
         updatedAt: yield* Clock.currentTimeMillis,
       }
       if (!(yield* replace(sessionID, delivery, next))) return
@@ -166,6 +165,16 @@ export const Plugin = define({
         { sessionID, text: wrapUp(next), description: "Live delivery: wrapping up", ...(resume ? { resume } : {}) },
         next,
       )
+      yield* markWrapUpSent(sessionID, next)
+    })
+
+    // Recorded only once the wrap-up is queued. If the Session went idle before that, the hook saw no wrap-up yet and
+    // sent its own, so the worst case is a second wrap-up rather than finishing a delivery the agent was never told about.
+    const markWrapUpSent = Effect.fn("DeliveryPlugin.markWrapUpSent")(function* (
+      sessionID: Session.ID,
+      stopped: State,
+    ) {
+      yield* replace(sessionID, stopped, { ...stopped, wrapUpSent: true, updatedAt: yield* Clock.currentTimeMillis })
     })
 
     // A delivery an earlier process started stops without waking its Session; extending the budget resumes it.
