@@ -21,13 +21,26 @@ export const Check = Schema.Struct({
   passed: Schema.Boolean,
 }).annotate({ identifier: "Delivery.Check" })
 
+/** The next version the agent has committed to, which it replaces when feedback changes the plan. */
+export interface Milestone extends Schema.Schema.Type<typeof Milestone> {}
+export const Milestone = Schema.Struct({
+  title: Schema.String,
+  scope: Schema.String,
+  /** Observable criteria; each needs a passing check of the same name before the version publishes. */
+  acceptance: Schema.Array(Schema.String),
+  /** When the agent expects to publish it, in epoch milliseconds. */
+  dueAt: Schema.Number,
+}).annotate({ identifier: "Delivery.Milestone" })
+
 export interface Version extends Schema.Schema.Type<typeof Version> {}
 export const Version = Schema.Struct({
   /** Counts from 1 within a delivery. */
   number: Schema.Int,
+  /** The title of the milestone it delivers. */
+  title: Schema.String,
   summary: Schema.String,
   checks: Schema.Array(Check),
-  /** The inbox messages whose feedback this version answers. */
+  /** The user messages whose feedback this version answers. */
   feedback: optional(Schema.Array(Schema.String)),
   publishedAt: Schema.Number,
 }).annotate({ identifier: "Delivery.Version" })
@@ -42,7 +55,11 @@ export const State = Schema.Struct({
   startedAt: Schema.Number,
   /** When the budget runs out, in epoch milliseconds. */
   deadline: Schema.Number,
+  /** The version being built. Publishing it clears this until the agent plans another. */
+  next: optional(Milestone),
   versions: Schema.Array(Version),
+  /** The agent's closing summary, once done. */
+  summary: optional(Schema.String),
   /** The server process that started the delivery. */
   boot: Schema.String,
   updatedAt: Schema.Number,
