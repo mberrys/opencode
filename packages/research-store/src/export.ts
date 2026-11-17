@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs"
 import { basename, join } from "node:path"
-import { type Digest, type Record, digestBytes, recordId } from "@opencode/research-record"
+import { type Digest, type Record, assertRecord, digestBytes, recordId } from "@opencode/research-record"
 import type { Store } from "./store.js"
 import { referencedBlobs } from "./verify.js"
 
@@ -41,7 +41,8 @@ export async function exportBundle(store: Store, options: ExportBundleOptions): 
   const log = join(directory, "log.jsonl")
   await Bun.write(log, `${lines.join("\n")}\n`)
 
-  const blobs = referencedBlobs(records)
+  // A record that breaks the contract is still exported, so the reader's verifier reports it, but its files are not.
+  const blobs = referencedBlobs(records.filter(isRecord))
   for (const blob of blobs) {
     await Bun.write(join(directory, "blobs", blob.slice("sha256:".length)), store.blobs.get(blob))
   }
@@ -104,4 +105,13 @@ export async function sealRendered(directory: string, files: readonly string[]):
   await Bun.write(path, `${JSON.stringify(manifest, null, 2)}
 `)
   return rendered
+}
+
+function isRecord(value: unknown): value is Record {
+  try {
+    assertRecord(value)
+    return true
+  } catch {
+    return false
+  }
 }

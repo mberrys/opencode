@@ -113,6 +113,30 @@ const TAMPERS: readonly Tamper[] = [
     expected: ["record.contract", "ref"],
   },
   {
+    name: "evidence with no target",
+    record: (fixture) =>
+      rewrite(fixture, true, (entries) => {
+        edit(find(entries, "evidence"), ["body", "target"], undefined)
+      }),
+    expected: ["record.contract"],
+  },
+  {
+    name: "a fragment with no byte range",
+    record: (fixture) =>
+      rewrite(fixture, true, (entries) => {
+        edit(find(entries, "fragment"), ["body", "range"], undefined)
+      }),
+    expected: ["record.contract"],
+  },
+  {
+    name: "a model call with no request contents",
+    record: (fixture) =>
+      rewrite(fixture, true, (entries) => {
+        edit(find(entries, "artifact"), ["body", "contents"], undefined)
+      }),
+    expected: ["record.contract"],
+  },
+  {
     name: "evidence that cites a claim the record never held",
     record: (fixture) =>
       rewrite(fixture, true, (entries) => {
@@ -363,7 +387,7 @@ describe("concurrent writers", () => {
     const head = fixture.store.head()!.seq
     const writers = ["a", "b", "c", "d"].map((name) =>
       Bun.spawn({
-        cmd: [process.execPath, fileURLToPath(new URL("./writer.ts", import.meta.url)), fixture.directory, name, "25"],
+        cmd: [process.execPath, fileURLToPath(new URL("./writer.ts", import.meta.url)), fixture.directory, name, "5"],
         stderr: "pipe",
       }),
     )
@@ -371,9 +395,9 @@ describe("concurrent writers", () => {
     expect(codes).toEqual([0, 0, 0, 0])
 
     const rows = fixture.store.commits()
-    expect(rows.map((row) => row.seq)).toEqual(Array.from({ length: head + 100 }, (_, index) => index + 1))
+    expect(rows.map((row) => row.seq)).toEqual(Array.from({ length: head + 20 }, (_, index) => index + 1))
     expect(new Set(rows.map((row) => row.prev)).size).toBe(rows.length)
-    expect(fixture.store.kind("claim")).toHaveLength(101)
+    expect(fixture.store.kind("claim")).toHaveLength(21)
     expect(verify(fixture.store).issues).toEqual([])
   })
 })

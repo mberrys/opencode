@@ -186,9 +186,18 @@ function blobsOf(record) {
   return []
 }
 
+// A body this script cannot read is reported against its record instead of stopping every check after it.
+function readable(id, check) {
+  try {
+    check()
+  } catch (error) {
+    fail("record.contract", short(id), "the body cannot be read: " + error.message)
+  }
+}
+
 // Every referenced file is read and rehashed, whether or not a fragment also points at it.
-for (const record of byId.values()) for (const digest of blobsOf(record)) blob(digest)
-for (const [id, record] of byId) {
+for (const [id, record] of byId) readable(id, () => blobsOf(record).forEach(blob))
+for (const [id, record] of byId) readable(id, () => {
   for (const target of refsOf(record)) {
     if (target === null || typeof target !== "object" || typeof target.id !== "string") {
       fail("ref", short(id), "a ref is not a kind and an id")
@@ -198,18 +207,18 @@ for (const [id, record] of byId) {
     if (!found) fail("ref", short(id), target.kind + ":" + short(target.id) + " does not resolve to a record")
     else if (found.kind !== target.kind) fail("ref", short(id), target.kind + ":" + short(target.id) + " names a " + found.kind)
   }
-}
+})
 // A first revision names its object by its own content; a later one keeps the object of the revision it replaces.
-for (const [id, record] of byId) {
+for (const [id, record] of byId) readable(id, () => {
   if (!record.parent) {
     if (record.object !== digestOf({ contract: record.contract, kind: record.kind, body: record.body }))
       fail("record.object", short(id), "a first revision's object is not the digest of its content")
-    continue
+    return
   }
   const parent = byId.get(record.parent)
   if (parent && parent.object !== record.object)
     fail("record.object", short(id), "a revision names another object than the revision it replaces")
-}
+})
 
 const REQUIRED = {
   "journal-article": [["author", "editor"], ["issued"], ["title"], ["container", "publisher"], ["DOI", "URL"]],
@@ -236,15 +245,15 @@ function missingCitationFields(source) {
   return (REQUIRED[source.type] ?? [["title"]]).filter((group) => !group.some(present)).map((group) => group.join(" or "))
 }
 
-for (const [id, record] of byId) {
+for (const [id, record] of byId) readable(id, () => {
   if (record.kind === "fragment") {
     const representation = byId.get(record.body.representation.id)
     if (!representation || representation.kind !== "representation") {
       fail("fragment.quote", short(id), "the representation it was cut from is missing")
-      continue
+      return
     }
     const bytes = blob(representation.body.text)
-    if (bytes === undefined) continue
+    if (bytes === undefined) return
     const quote = Buffer.from(record.body.quote, "utf8")
     const start = record.body.range.start
     const end = record.body.range.end
@@ -265,7 +274,7 @@ for (const [id, record] of byId) {
   if (record.kind === "source") {
     for (const missing of missingCitationFields(record.body)) fail("citation.fields", short(id), "missing " + missing)
   }
-}
+})
 
 const MARKER = /\[research:([^\]\n]+)\]([\s\S]*?)\[\/research:\1\]/g
 function shownPassages(session) {
@@ -286,23 +295,23 @@ function shownPassages(session) {
   return passages
 }
 
-for (const [id, record] of byId) {
-  if (record.kind !== "evidence" || record.author?.voice !== "agent") continue
-  if (record.body.target?.kind !== "fragment") continue
+for (const [id, record] of byId) readable(id, () => {
+  if (record.kind !== "evidence" || record.author?.voice !== "agent") return
+  if (record.body.target?.kind !== "fragment") return
   const fragment = byId.get(record.body.target.fragment.id)
   if (!fragment || fragment.kind !== "fragment") {
     fail("evidence.shown", short(id), "the fragment it cites is missing")
-    continue
+    return
   }
   if (!record.session) {
     fail("evidence.shown", short(id), "agent evidence without a session cannot be shown")
-    continue
+    return
   }
   const passages = shownPassages(record.session)
   const texts = passages.get(fragment.body.address) ?? []
   if (!texts.some((body) => body.includes(fragment.body.quote)) && !wasCutInSession(record.session, record.body.target.fragment.id))
     fail("evidence.shown", short(id), "the fragment was never shown to that session")
-}
+})
 
 function wasCutInSession(session, fragmentID) {
   return records.some(
