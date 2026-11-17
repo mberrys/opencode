@@ -104,6 +104,7 @@ import { CommandPlugin } from "./command.js"
 import { IdentityPlugin } from "./identity.js"
 import { PlanPlugin } from "./plan.js"
 import { GoalPlugin } from "./goal.js"
+import { DeliveryPlugin } from "./delivery.js"
 import { ModelsDevPlugin } from "./models-dev.js"
 import { McpCodeModeDefaultsPlugin } from "./mcp-codemode-defaults.js"
 import { ProviderPlugins } from "./provider.js"
@@ -242,16 +243,19 @@ export const requirements = LayerNode.group([
 
 export type InternalPlugin = Plugin<Requirements | Scope.Scope>
 
-// The research harness ships behind one flag: on in local and dev builds, off in releases.
-const Research = {
-  id: ResearchPlugin.id,
+// A built-in that ships behind a flag: on in local and dev builds, off in releases.
+const flagged = <R>(key: Flag.Key, plugin: { id: string; effect: (host: never) => Effect.Effect<void, never, R> }) => ({
+  id: plugin.id,
   effect: (host: unknown) =>
     Effect.gen(function* () {
       const flags = yield* Flag.Service
-      if (!(yield* flags.enabled("research"))) return
-      yield* ResearchPlugin.effect(host as never)
+      if (!(yield* flags.enabled(key))) return
+      yield* plugin.effect(host as never)
     }),
-}
+})
+
+const Research = flagged("research", ResearchPlugin)
+const Delivery = flagged("live_delivery", DeliveryPlugin.Plugin)
 
 const pre = [
   ToolInputRepairPlugin.Plugin,
@@ -264,6 +268,7 @@ const pre = [
   PlanPlugin.Plugin,
   CommandPlugin.Plugin,
   GoalPlugin.Plugin,
+  Delivery,
   SkillPlugin.Plugin,
   VcsHgPlugin.Plugin,
   ModelsDevPlugin,

@@ -18,5 +18,7 @@ export const registry = {
   codemode_vm: "Run the Code Mode execute tool on the experimental bytecode VM instead of the legacy interpreter.",
   research:
     "Enable the research harness: the provenance record, the document library, and the library and evidence tools.",
+  live_delivery:
+    "Enable experimental live delivery: the agent ships a working first version, then publishes checked versions until a time budget runs out, taking feedback as it goes.",
 } as const satisfies Record<string, string>
 export type Key = keyof typeof registry

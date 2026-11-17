@@ -16666,6 +16666,12 @@
               "codemode_vm": {
                 "type": "boolean"
               },
+              "research": {
+                "type": "boolean"
+              },
+              "live_delivery": {
+                "type": "boolean"
+              },
               "part_rows": {
                 "type": "boolean"
               },
