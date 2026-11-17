@@ -390,9 +390,7 @@ export function installTools(ctx: Pick<Context, "tool" | "permission" | "locatio
                 run,
               },
             })
-            ws.store.commit([protocol], { at })
-            record(ws, "research.protocol", input as Json, [protocol], () => ({ protocol: refOf(protocol), run }))
-            return { protocol: refOf(protocol), run }
+            return record(ws, "research.protocol", input as Json, [protocol], () => ({ protocol: refOf(protocol), run }))
           },
           (result) => `protocol ${result.protocol.kind}:${result.protocol.id}
 run ${result.run}`,
@@ -448,12 +446,10 @@ run ${result.run}`,
                 run: ws.run,
                 mediaType: "text/markdown",
                 sentences,
-                inputs: sentences.flatMap((sentence) => (sentence.claim ? [sentence.claim as Ref] : [])),
+                inputs: sentences.flatMap((sentence) => (sentence.claim ? [sentence.claim] : [])),
               },
             })
-            ws.store.commit([answer], { at })
-            record(ws, "research.answer", input as Json, [answer], () => ({ answer: refOf(answer) }))
-            return { answer: refOf(answer) }
+            return record(ws, "research.answer", input as Json, [answer], () => ({ answer: refOf(answer) }))
           },
           (result) => `answer ${result.answer.kind}:${result.answer.id}`,
         ),

@@ -103,11 +103,10 @@ export function verify(store: Store): VerifyReport {
     }
   }
 
-  const byId = new Map(records.map((record) => [recordId(record), record] as const))
   for (const record of records) {
     const from = short(recordId(record))
     for (const target of refsOf(record)) {
-      const found = byId.get(target.id)
+      const found = ids.get(target.id)
       if (!found) issue(issues, "ref", from, `${target.kind}:${short(target.id)} does not resolve to a record`)
       else if (found.kind !== target.kind) issue(issues, "ref", from, `${target.kind}:${short(target.id)} names a ${found.kind}`)
     }
@@ -115,7 +114,7 @@ export function verify(store: Store): VerifyReport {
 
   for (const record of records) {
     if (record.kind !== "fragment") continue
-    const representation = byId.get(record.body.representation.id)
+    const representation = ids.get(record.body.representation.id)
     if (!representation || representation.kind !== "representation") {
       issue(issues, "fragment.quote", short(recordId(record)), "the representation it was cut from is missing")
       continue
@@ -136,7 +135,6 @@ export function verify(store: Store): VerifyReport {
     }
   }
 
-  const sessions = new Map(records.map((record) => [recordId(record), record] as const))
   const shown = new Map<string, ReturnType<Store["shownSet"]>>()
   // A receipt that recorded the fragment proves this session cut it; the model-call set is the stronger check.
   const cutInSession = (session: string, fragment: { id: string }) =>
@@ -149,7 +147,7 @@ export function verify(store: Store): VerifyReport {
   for (const record of records) {
     if (record.kind !== "evidence" || record.author.voice !== "agent") continue
     if (record.body.target.kind !== "fragment") continue
-    const fragment = sessions.get(record.body.target.fragment.id)
+    const fragment = ids.get(record.body.target.fragment.id)
     if (!fragment || fragment.kind !== "fragment") {
       issue(issues, "evidence.shown", short(recordId(record)), "the fragment it cites is missing")
       continue
@@ -195,7 +193,6 @@ function parseCommit(body: string, seq: number, issues: VerifyIssue[]): CommitBo
   }
 }
 
-/** Every file the records point at, so an export can copy exactly the bytes the record needs. */
 /** Every ref a record makes, so a dangling citation fails verification rather than only a lookup. */
 export function refsOf(record: Record): Ref[] {
   if (record.kind === "copy") return [record.body.source]
@@ -220,6 +217,7 @@ export function refsOf(record: Record): Ref[] {
   return []
 }
 
+/** Every file the records point at, so an export can copy exactly the bytes the record needs. */
 export function referencedBlobs(records: readonly Record[]): Digest[] {
   return [...new Set(records.flatMap(blobsOf))]
 }

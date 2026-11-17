@@ -227,7 +227,6 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
           description: "Run the research agent on a question",
           globalFlags: ServerFlags,
           params: {
-            directory: DirectoryFlag,
             question: Argument.String("question").pipe(
               Argument.withDescription("The research question"),
               Argument.variadic({ min: 0 }),

@@ -14,7 +14,7 @@ import {
 import type { Store } from "@opencode/research-store"
 import { replay, verify } from "@opencode/research-store"
 import type { ResearchRecord } from "@opencode/research-record"
-import { entryOfShort, latest } from "@opencode/research-library"
+import { cites, entryOfShort, grep, latest, outline, read, search } from "@opencode/research-library"
 import { type ClaimRecord, resolveRun, shownToSession, tierOf } from "./tier.js"
 
 export interface Actor {
@@ -254,7 +254,7 @@ export interface VerifyResult {
 
 export function check(ctx: Session, run = ctx.run): VerifyResult {
   const record = verify(ctx.store)
-  const replayed = replay(ctx.store, run)
+  const replayed = replay(ctx.store, run, { execute: replayLibrary(ctx.store) })
   const at = new Date().toISOString()
   const receipt = makeRecord({
     kind: "receipt",
@@ -280,6 +280,46 @@ export function check(ctx: Session, run = ctx.run): VerifyResult {
   })
   ctx.store.commit([receipt], { at })
   return { record, replay: replayed }
+}
+
+/**
+ * Reruns the deterministic library tools for replay. A receipt holds the tool's own input: the source is the
+ * string the agent typed, and the limit it asked for shapes the output, so both are resolved and passed exactly
+ * as the tool did. Anything else, or an input that no longer resolves, cannot replay here.
+ */
+export function replayLibrary(store: Store) {
+  return (tool: string, value: Json): Json | undefined => {
+    const input = value as {
+      pattern?: string
+      query?: string
+      source?: string
+      address?: string
+      section?: number
+      limit?: number
+    }
+    try {
+      const ref = input.source ? store.resolve(input.source) : undefined
+      if (ref && ref.kind !== "source") return undefined
+      const source = ref ? { source: ref } : {}
+      const limit = input.limit === undefined ? {} : { limit: input.limit }
+      if (tool === "library.grep" && input.pattern !== undefined)
+        return grep(store, { pattern: input.pattern, ...source, ...limit }) as unknown as Json
+      if (tool === "library.search" && input.query !== undefined)
+        return search(store, { query: input.query, ...source, ...limit }) as unknown as Json
+      if (tool === "library.read")
+        return read(store, {
+          ...source,
+          ...(input.address ? { address: input.address } : {}),
+          ...(input.section === undefined ? {} : { section: input.section }),
+          ...limit,
+        }) as unknown as Json
+      if (tool === "library.outline" && ref) return outline(store, ref) as unknown as Json
+      if (tool === "library.cites" && ref) return cites(store, ref) as unknown as Json
+      return undefined
+    } catch {
+      return undefined
+    }
+  }
 }
 
 export function claimsOf(store: Store, run: string): ClaimRecord[] {

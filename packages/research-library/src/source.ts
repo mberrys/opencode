@@ -109,7 +109,7 @@ async function fromUrl(input: AddInput, options: AddOptions, at: string): Promis
   const csl: Csl = page?.csl ?? { title: input.title ?? url, URL: url, accessed: { "date-parts": [[new Date(at).getUTCFullYear(), new Date(at).getUTCMonth() + 1, new Date(at).getUTCDate()]] } }
   return {
     type: input.type ?? page?.type ?? "other",
-    identifiers: { url, ...(page?.csl.DOI ? { doi: page.csl.DOI } : {}) },
+    identifiers: { url, ...(page?.csl.DOI ? { doi: page.csl.DOI } : {}), ...(input.doi ? { doi: input.doi } : {}) },
     csl: { ...csl, ...(input.title ? { title: input.title } : {}) },
     origins: page?.origins ?? { title: "page", URL: "page", accessed: "page" },
     bytes,
@@ -123,8 +123,12 @@ async function fromUrl(input: AddInput, options: AddOptions, at: string): Promis
 
 async function fromDoi(input: AddInput, options: AddOptions): Promise<Draft> {
   const doi = input.doi!
-  const work = await crossref(doi, options.fetch ?? fetch)
-  if (!work) throw new Error(`Crossref does not know the DOI ${doi}`)
+  const found = await crossref(doi, options.fetch ?? fetch)
+  if (!found) throw new Error(`Crossref does not know the DOI ${doi}`)
+  // A title the caller gave wins over Crossref's, as it does for a file or a page.
+  const work = input.title
+    ? { ...found, csl: { ...found.csl, title: input.title }, origins: { ...found.origins, title: "researcher" as const } }
+    : found
   if (!work.abstract) {
     return {
       type: input.type ?? work.type,
