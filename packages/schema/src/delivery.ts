@@ -14,6 +14,22 @@ export const MAX_BUDGET = 7 * 24 * 60 * 60 * 1000
 export const Status = Schema.Literals(["active", "stopping", "done"])
 export type Status = typeof Status.Type
 
+/**
+ * Why a delivery stopped: the user stopped it, the time budget ran out, the agent stopped making progress, or the server
+ * restarted while it ran. Extending the budget resumes a delivery stopped by the budget or a restart.
+ */
+export const StoppedBy = Schema.Literals(["user", "budget", "stalled", "restart"])
+export type StoppedBy = typeof StoppedBy.Type
+
+/** A message the user sent while the delivery ran, kept so a compaction cannot drop it. */
+export interface Feedback extends Schema.Schema.Type<typeof Feedback> {}
+export const Feedback = Schema.Struct({
+  /** The message's ID, which a version names when it answers it. */
+  id: Schema.String,
+  text: Schema.String,
+  at: Schema.Number,
+}).annotate({ identifier: "Delivery.Feedback" })
+
 export interface Check extends Schema.Schema.Type<typeof Check> {}
 export const Check = Schema.Struct({
   /** What was checked, for example the command that ran. */
@@ -52,6 +68,12 @@ export const State = Schema.Struct({
   status: Status,
   /** Why the delivery last changed status, such as a stop by the user or the budget running out. */
   reason: optional(Schema.String),
+  stoppedBy: optional(StoppedBy),
+  /** Whether the agent has been told to wrap up since the delivery stopped. */
+  wrapUpSent: optional(Schema.Boolean),
+  /** Continuations in a row after which the agent had called no tool. */
+  stalls: optional(Schema.Int),
+  feedback: optional(Schema.Array(Feedback)),
   startedAt: Schema.Number,
   /** When the budget runs out, in epoch milliseconds. */
   deadline: Schema.Number,
@@ -74,8 +96,8 @@ const errors = {
 /**
  * The live delivery plugin's RPC. Clients read a Session's delivery with `get` and keep it current from `changed`,
  * which the plugin publishes in the Session's Location on every write. `stop` asks an active delivery to wrap up and
- * leaves one already stopping as it is. `extend` adds time to an active delivery's budget, up to `MAX_BUDGET` from its
- * start. The schemas are Standard Schemas too, so Promise clients can call it.
+ * leaves one already stopping as it is. `extend` adds time to the budget, up to `MAX_BUDGET` from the start; it resumes
+ * a delivery stopped by the budget or a restart, but not one the user or a stall stopped. The schemas are Standard Schemas too, so Promise clients can call it.
  */
 export const Definition = Rpc.define({
   id: "opencode.delivery",
