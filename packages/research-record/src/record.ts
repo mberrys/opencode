@@ -1,4 +1,4 @@
-import { type Digest, type Json, digest, isDigest } from "./digest.js"
+import { type Digest, type Json, assertJson, digest, isDigest } from "./digest.js"
 
 export const CONTRACT = "research-record@1"
 
@@ -437,12 +437,39 @@ function assertBody(kind: Kind, value: unknown): void {
       if (!flags.includes(flag as string)) throw new Error(`${kind}.flags must be among ${flags.join(", ")}`)
   if (kind === "artifact") assertArtifact(body)
   if (kind === "evidence") assertEvidence(body)
+  if (kind === "receipt") assertOperation(body.operation)
+  if (kind === "fragment") assertRange(body.range)
+}
+
+// Verification follows these nested refs and digests, so their shape is part of the contract, not left to readers.
+function assertOperation(value: unknown): void {
+  const operation = requireObject(value, "receipt.operation")
+  if (operation.kind === "tool") {
+    check(operation.tool, "string", "receipt.operation.tool")
+    assertJson(operation.input, "receipt.operation.input")
+    return
+  }
+  if (operation.kind === "model") return assertRefValue(operation.call, "receipt.operation.call")
+  if (operation.kind === "script") return assertRefValue(operation.artifact, "receipt.operation.artifact")
+  throw new Error("receipt.operation.kind must be tool, model or script")
+}
+
+function assertRange(value: unknown): void {
+  const range = requireObject(value, "fragment.range")
+  if (!Number.isSafeInteger(range.start) || !Number.isSafeInteger(range.end))
+    throw new Error("fragment.range must be two whole byte offsets")
 }
 
 function assertArtifact(body: { [key: string]: unknown }): void {
   if (body.type === "answer") {
     check(body.sentences, "json-array", "artifact.sentences")
     check(body.mediaType, "string", "artifact.mediaType")
+    const sentences = body.sentences as unknown[]
+    sentences.forEach((item, index) => {
+      const sentence = requireObject(item, `artifact.sentences[${index}]`)
+      check(sentence.text, "string", `artifact.sentences[${index}].text`)
+      if (sentence.claim !== undefined) assertRefValue(sentence.claim, `artifact.sentences[${index}].claim`)
+    })
     return
   }
   if (body.type === "model-call") {
@@ -455,6 +482,13 @@ function assertArtifact(body: { [key: string]: unknown }): void {
     check(body.script, "digest", "artifact.script")
     check(body.result, "digest", "artifact.result")
     check(body.calls, "json-array", "artifact.calls")
+    const calls = body.calls as unknown[]
+    calls.forEach((item, index) => {
+      const call = requireObject(item, `artifact.calls[${index}]`)
+      check(call.tool, "string", `artifact.calls[${index}].tool`)
+      check(call.input, "digest", `artifact.calls[${index}].input`)
+      check(call.output, "digest", `artifact.calls[${index}].output`)
+    })
     return
   }
   check(body.mediaType, "string", "artifact.mediaType")

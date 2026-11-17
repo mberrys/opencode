@@ -6,6 +6,9 @@ import {
   type SourceBody,
   type SourceType,
   type FragmentBody,
+  CONTRACT,
+  type Json,
+  assertRecord,
   canonical,
   digest,
   recordId,
@@ -18,6 +21,8 @@ import type { CommitBody, Store } from "./store.js"
 export type CheckName =
   | "log.chain"
   | "log.seq"
+  | "record.contract"
+  | "record.object"
   | "record.id"
   | "record.index"
   | "ref"
@@ -64,7 +69,12 @@ export function verify(store: Store): VerifyReport {
     if (parsed.seq !== row.seq) issue(issues, "log.chain", `commit ${row.seq}`, "the body names another sequence")
     if (row.prev !== parsed.prev) issue(issues, "log.chain", `commit ${row.seq}`, "the indexed prev differs from the body")
     previous = row.digest
-    for (const record of parsed.records) records.push(record)
+    for (const record of parsed.records) {
+      // A record that breaks the contract is reported and left out, so one bad body cannot stop the other checks.
+      const failure = contractFailure(record)
+      if (failure) issue(issues, "record.contract", `commit ${row.seq}`, failure)
+      else records.push(record)
+    }
   }
 
   for (const record of records) {
@@ -75,16 +85,25 @@ export function verify(store: Store): VerifyReport {
     ids.set(id, record)
   }
 
-  const indexed = new Map<string, Record>()
-  try {
-    for (const record of store.all()) indexed.set(recordId(record), record)
-  } catch (error) {
-    issue(issues, "record.index", "index", `the query index cannot be read: ${(error as Error).message}`)
+  // Lookups trust the id, kind and object columns, so each is checked against the body it sits beside.
+  const indexed = new Set<string>()
+  for (const row of store.index()) {
+    const record = readIndexed(row.body)
+    if (typeof record === "string") {
+      issue(issues, "record.index", short(row.id), `the indexed body is not a record: ${record}`)
+      continue
+    }
+    const id = recordId(record)
+    indexed.add(id)
+    if (row.id !== id) issue(issues, "record.index", short(row.id), `the indexed id is not the body's id ${short(id)}`)
+    if (row.kind !== record.kind)
+      issue(issues, "record.index", short(id), `the index files a ${record.kind} under ${row.kind}`)
+    if (row.object !== record.object) issue(issues, "record.index", short(id), "the indexed object is not the body's")
   }
   for (const [id] of ids) {
     if (!indexed.has(id)) issue(issues, "record.index", short(id), "the record is in the log but not in the index")
   }
-  for (const [id] of indexed) {
+  for (const id of indexed) {
     if (!ids.has(id)) issue(issues, "record.index", short(id), "the index holds a record the log does not")
   }
 
@@ -110,6 +129,19 @@ export function verify(store: Store): VerifyReport {
       if (!found) issue(issues, "ref", from, `${target.kind}:${short(target.id)} does not resolve to a record`)
       else if (found.kind !== target.kind) issue(issues, "ref", from, `${target.kind}:${short(target.id)} names a ${found.kind}`)
     }
+  }
+
+  // A first revision names its object by its own content; a later one keeps the object of the revision it replaces.
+  for (const record of records) {
+    const id = short(recordId(record))
+    if (!record.parent) {
+      const own = digest({ contract: CONTRACT, kind: record.kind, body: record.body as unknown as Json })
+      if (record.object !== own) issue(issues, "record.object", id, "a first revision's object is not the digest of its content")
+      continue
+    }
+    const parent = ids.get(record.parent)
+    if (parent && parent.object !== record.object)
+      issue(issues, "record.object", id, "a revision names another object than the revision it replaces")
   }
 
   for (const record of records) {
@@ -181,6 +213,25 @@ export function verify(store: Store): VerifyReport {
   }
 }
 
+function contractFailure(value: unknown): string | undefined {
+  try {
+    assertRecord(value)
+    return undefined
+  } catch (error) {
+    return (error as Error).message
+  }
+}
+
+function readIndexed(body: string): Record | string {
+  try {
+    const value: unknown = JSON.parse(body)
+    assertRecord(value)
+    return value
+  } catch (error) {
+    return (error as Error).message
+  }
+}
+
 function parseCommit(body: string, seq: number, issues: VerifyIssue[]): CommitBody | undefined {
   try {
     const parsed: unknown = JSON.parse(body)
@@ -195,6 +246,11 @@ function parseCommit(body: string, seq: number, issues: VerifyIssue[]): CommitBo
 
 /** Every ref a record makes, so a dangling citation fails verification rather than only a lookup. */
 export function refsOf(record: Record): Ref[] {
+  const parent: Ref[] = record.parent ? [{ kind: record.kind, id: record.parent }] : []
+  return [...parent, ...bodyRefs(record)]
+}
+
+function bodyRefs(record: Record): Ref[] {
   if (record.kind === "copy") return [record.body.source]
   if (record.kind === "representation") return [record.body.copy]
   if (record.kind === "fragment") return [record.body.representation]

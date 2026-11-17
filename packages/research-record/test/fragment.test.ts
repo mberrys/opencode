@@ -98,4 +98,41 @@ describe("fragments", () => {
     expect(() => parseAddress("section 4")).toThrow("not an address")
     expect(() => parseAddress("k7f2/p3/s2")).toThrow("not an address")
   })
+  test("a seeded sweep: every cut on character boundaries verifies, and every one-unit change to it fails", () => {
+    // mulberry32, so each run checks the same fragments and a failure always reproduces.
+    let state = 0xf7a9
+    const next = () => {
+      state = (state + 0x6d2b79f5) | 0
+      let value = Math.imul(state ^ (state >>> 15), 1 | state)
+      value = (value + Math.imul(value ^ (value >>> 7), 61 | value)) ^ value
+      return ((value ^ (value >>> 14)) >>> 0) / 4294967296
+    }
+    // One, two, three and four byte characters, combining marks and whitespace, so boundaries are never uniform.
+    const alphabet = [..."ab Zé€研😀\u0301\n.,"]
+    const document = Array.from({ length: 600 }, () => alphabet[Math.floor(next() * alphabet.length)]).join("")
+    const encoded = new TextEncoder().encode(document)
+    const boundaries = [0, ...[...document].map((_, index, characters) => new TextEncoder().encode(characters.slice(0, index + 1).join("")).length)]
+    const accepted: string[] = []
+    const refused: string[] = []
+    for (let round = 0; round < 300; round++) {
+      const a = boundaries[Math.floor(next() * boundaries.length)]!
+      const b = boundaries[Math.floor(next() * boundaries.length)]!
+      if (a === b) continue
+      const fragment = cut({ representation, text: encoded, start: Math.min(a, b), end: Math.max(a, b), address: "k7f2:1/p1/s1" })
+      if (!verifyFragment(fragment, encoded).ok) refused.push(`${fragment.range.start}..${fragment.range.end}`)
+      const quote = [...fragment.quote]
+      const position = Math.floor(next() * quote.length)
+      const swapped = quote[position] === "a" ? "b" : "a"
+      const changes = [
+        { ...fragment, quote: [...quote.slice(0, position), swapped, ...quote.slice(position + 1)].join("") },
+        { ...fragment, range: { start: fragment.range.start + 1, end: fragment.range.end + 1 } },
+        { ...fragment, range: { start: fragment.range.start, end: fragment.range.end - 1 } },
+        ...(fragment.before ? [{ ...fragment, before: `x${fragment.before.slice(1)}` === fragment.before ? `y${fragment.before.slice(1)}` : `x${fragment.before.slice(1)}` }] : []),
+        ...(fragment.after ? [{ ...fragment, after: `${fragment.after.slice(0, -1)}x` === fragment.after ? `${fragment.after.slice(0, -1)}y` : `${fragment.after.slice(0, -1)}x` }] : []),
+      ]
+      for (const change of changes) if (verifyFragment(change, encoded).ok) accepted.push(JSON.stringify(change.range) + change.quote)
+    }
+    expect(refused).toEqual([])
+    expect(accepted).toEqual([])
+  })
 })

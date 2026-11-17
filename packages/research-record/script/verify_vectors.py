@@ -49,21 +49,34 @@ def jcs_string(text):
 
 
 def jcs_number(value):
-    if isinstance(value, int):
-        return str(value)
+    # RFC 8785 serializes every number as an IEEE double in ECMAScript's Number::toString form, so a JSON
+    # integer is read as the double it rounds to, and the exponent cut-offs are ECMAScript's, not Python's.
+    value = float(value)
     if value != value or value in (float("inf"), float("-inf")):
         raise ValueError("canonical JSON cannot hold %r" % value)
     if value == 0:
         return "0"
-    if value.is_integer() and abs(value) < 1e21:
-        return str(int(value))
-    text = repr(value)
-    if "e" in text:
-        mantissa, exponent = text.split("e")
-        sign = exponent[0] if exponent[0] in "+-" else "+"
-        digits = exponent.lstrip("+-").lstrip("0") or "0"
-        return "%se%s%s" % (mantissa, sign, digits)
-    return text
+    sign = "-" if value < 0 else ""
+    # repr gives the shortest digits that round trip, which is what ECMAScript chooses as well.
+    text = repr(abs(value))
+    mantissa, _, exponent = text.partition("e")
+    whole, _, fraction = mantissa.partition(".")
+    fraction = "" if fraction == "0" else fraction
+    whole = whole.lstrip("0")
+    shift = len(whole) if whole else -(len(fraction) - len(fraction.lstrip("0")))
+    digits = (whole + fraction).lstrip("0").rstrip("0")
+    k = len(digits)
+    n = shift + int(exponent or 0)
+    if k <= n <= 21:
+        return sign + digits + "0" * (n - k)
+    if 0 < n <= 21:
+        return sign + digits[:n] + "." + digits[n:]
+    if -6 < n <= 0:
+        return sign + "0." + "0" * (-n) + digits
+    power = n - 1
+    mark = "+" if power >= 0 else "-"
+    head = digits if k == 1 else digits[0] + "." + digits[1:]
+    return sign + head + "e" + mark + str(abs(power))
 
 
 def jcs(value):

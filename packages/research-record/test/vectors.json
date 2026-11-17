@@ -156,5 +156,53 @@
     ],
     "canonical": "[[[[{\"z\":[1,2,{\"y\":\"x\"}]}]]]]",
     "digest": "sha256:085d50ee4007dd9b9e0fb7025e3e57d12ef45adba31c60ae42074ed22385408e"
+  },
+  {
+    "name": "numbers-ecmascript-form",
+    "input": [
+      1e21,
+      1e20,
+      1e-6,
+      1e-7,
+      123e-20,
+      5e-324,
+      1.7976931348623157e308,
+      0.1,
+      -1.5,
+      1.0,
+      -0.0
+    ],
+    "canonical": "[1e+21,100000000000000000000,0.000001,1e-7,1.23e-18,5e-324,1.7976931348623157e+308,0.1,-1.5,1,0]",
+    "digest": "sha256:1e62cfa34305ff2a74174595dc99c30a3353ad3e520cca5ae47006c64493b502"
+  },
+  {
+    "name": "integers-beyond-double-precision",
+    "input": [
+      100000000000000000000000,
+      9007199254740993
+    ],
+    "canonical": "[1e+23,9007199254740992]",
+    "digest": "sha256:92b089dd40eb0ba0114d18986fbdf196c525c093c3848d69174ec14873253c6c"
+  },
+  {
+    "name": "control-and-separator-characters",
+    "input": "\u0000\u001f  \"\\/",
+    "canonical": "\"\\u0000\\u001f  \\\"\\\\/\"",
+    "digest": "sha256:ac42097a2aba9e2ed0917065cb6c5922fbb9d9afab198144e010037745312cbc"
+  },
+  {
+    "name": "lone-surrogate",
+    "input": "a\ud800b",
+    "canonical": "\"a\\ud800b\"",
+    "digest": "sha256:27432a872192a56508c32189524a5bd0968069cc88370a7e73c775b971a077df"
+  },
+  {
+    "name": "nul-and-empty-keys",
+    "input": {
+      "\u0000": 1,
+      "": 2
+    },
+    "canonical": "{\"\":2,\"\\u0000\":1}",
+    "digest": "sha256:68b96e167112cc00f0c9cbbfff730f52902a8358eedabc03bf41a8ce9a86bbac"
   }
 ]

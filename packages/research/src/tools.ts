@@ -122,7 +122,7 @@ export function installTools(ctx: Pick<Context, "tool" | "permission" | "locatio
             })
           const ws = workspace(tool)
           const added = yield* Effect.tryPromise({
-            try: () => addSource(ws.store, { ...input, ...(file ? { file } : {}) }),
+            try: () => addSource(ws.store, { ...input, ...(file ? { file } : {}), by: "agent" }),
             catch: ErrorText,
           })
           record(ws, "library.add", input as Json, [], () => added)

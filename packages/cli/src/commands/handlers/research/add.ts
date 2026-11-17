@@ -26,6 +26,7 @@ export default Runtime.handler(
           ...(file ? { file } : {}),
           ...(Option.isSome(input.title) ? { title: input.title.value } : {}),
           ...(type ? { type } : {}),
+          by: "researcher",
         }),
       catch: (error) => new Error((error as Error).message),
     })

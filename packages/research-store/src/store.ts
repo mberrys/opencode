@@ -137,6 +137,16 @@ export class Store {
     return this.database.query("SELECT seq, at, prev, digest, body FROM commit_log ORDER BY seq").all() as CommitRow[]
   }
 
+  /** The query index as stored, every column included, so verify can check each one against its body. */
+  index(): { id: string; kind: string; object: string; body: string }[] {
+    return this.database.query("SELECT id, kind, object, body FROM record ORDER BY rowid").all() as {
+      id: string
+      kind: string
+      object: string
+      body: string
+    }[]
+  }
+
   /** Every record, in commit order. */
   all(): Record[] {
     const rows = this.database.query("SELECT body FROM record ORDER BY rowid").all() as { body: string }[]

@@ -58,4 +58,41 @@ describe("canonical JSON", () => {
     expect(result.stdout.toString().trim()).toBe(`python verifier agrees on ${vectors.length} vectors`)
     expect(result.exitCode).toBe(0)
   })
+
+  test("the python verifier agrees on a seeded sweep of numbers across every magnitude", async () => {
+    const { mkdtempSync } = await import("node:fs")
+    const { tmpdir } = await import("node:os")
+    const { join } = await import("node:path")
+    const { fileURLToPath } = await import("node:url")
+    // mulberry32: the same 2000 numbers on every run, so a disagreement always reproduces.
+    let state = 0x5eed
+    const next = () => {
+      state = (state + 0x6d2b79f5) | 0
+      let value = Math.imul(state ^ (state >>> 15), 1 | state)
+      value = (value + Math.imul(value ^ (value >>> 7), 61 | value)) ^ value
+      return ((value ^ (value >>> 14)) >>> 0) / 4294967296
+    }
+    const numbers = Array.from({ length: 2000 }, (_, index) => {
+      const sign = next() < 0.5 ? -1 : 1
+      if (index % 4 === 0) return sign * Math.floor(next() * 2 ** 53)
+      const magnitude = 10 ** Math.floor(next() * 630 - 323)
+      return sign * next() * magnitude
+    }).filter(Number.isFinite)
+    const sweep = numbers.map((value, index) => ({
+      name: `sweep-${index}`,
+      input: value,
+      canonical: canonical(value),
+      digest: digest(value),
+    }))
+    const file = join(mkdtempSync(join(tmpdir(), "research-vectors-")), "sweep.json")
+    await Bun.write(file, JSON.stringify(sweep))
+    const runner = Bun.which("python") ?? Bun.which("python3") ?? Bun.which("py")
+    if (!runner) throw new Error("python is needed for the independent digest verifier")
+    const result = Bun.spawnSync({
+      cmd: [runner, "script/verify_vectors.py", file],
+      cwd: fileURLToPath(new URL("..", import.meta.url)),
+    })
+    expect(result.stdout.toString().trim()).toBe(`python verifier agrees on ${sweep.length} vectors`)
+    expect(result.exitCode).toBe(0)
+  })
 })

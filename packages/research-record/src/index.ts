@@ -59,7 +59,7 @@ export type {
   WriteInput,
 } from "./record.js"
 
-export { CONTEXT_CHARACTERS, cut, formatAddress, parseAddress, verifyFragment, verifyFragmentBytes } from "./fragment.js"
+export { CONTEXT_CHARACTERS, cut, formatAddress, parseAddress, verifyFragment } from "./fragment.js"
 export type { Address, Check, CutInput, VerificationFailure } from "./fragment.js"
 
 export { deriveTier, TIERS } from "./tier.js"

@@ -21,6 +21,8 @@ export interface AddInput {
   readonly doi?: string
   readonly title?: string
   readonly type?: SourceType
+  /** Who supplied `title`. An agent's title is flagged on every claim that cites the source, so it is the default. */
+  readonly by?: "agent" | "researcher"
 }
 
 export interface AddOptions {
@@ -61,7 +63,7 @@ export async function addSource(store: Store, input: AddInput, options: AddOptio
         ? await fromDoi(input, options)
         : undefined
   if (!draft) throw new Error("give a file, a url or a doi")
-  return persist(store, draft, at)
+  return persist(store, input.title ? { ...draft, origins: { ...draft.origins, title: input.by ?? "agent" } } : draft, at)
 }
 
 async function fromFile(input: AddInput, options: AddOptions): Promise<Draft> {
@@ -85,7 +87,7 @@ async function fromFile(input: AddInput, options: AddOptions): Promise<Draft> {
     origins: {
       ...(page?.origins ?? {}),
       ...(enriched?.origins ?? {}),
-      title: input.title ? "file" : enriched ? "crossref" : page?.origins.title ?? "file",
+      title: enriched ? "crossref" : page?.origins.title ?? "file",
     },
     bytes,
     mime,
@@ -126,9 +128,7 @@ async function fromDoi(input: AddInput, options: AddOptions): Promise<Draft> {
   const found = await crossref(doi, options.fetch ?? fetch)
   if (!found) throw new Error(`Crossref does not know the DOI ${doi}`)
   // A title the caller gave wins over Crossref's, as it does for a file or a page.
-  const work = input.title
-    ? { ...found, csl: { ...found.csl, title: input.title }, origins: { ...found.origins, title: "researcher" as const } }
-    : found
+  const work = input.title ? { ...found, csl: { ...found.csl, title: input.title } } : found
   if (!work.abstract) {
     return {
       type: input.type ?? work.type,

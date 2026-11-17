@@ -59,6 +59,7 @@ function text(digest) {
   }
 }
 
+const DIGEST = /^sha256:[0-9a-f]{64}$/
 const records = []
 const ids = new Set()
 let previous = null
@@ -96,8 +97,38 @@ else {
       fail("log.chain", "commit " + row.seq, "prev is " + String(row.prev) + ", not " + String(previous))
     if (digestOf(body) !== row.digest) fail("log.chain", "commit " + row.seq, "the commit does not hash to its digest")
     previous = row.digest
-    for (const record of row.records) records.push(record)
+    for (const record of row.records) {
+      const failure = contractFailure(record)
+      if (failure) fail("record.contract", "commit " + row.seq, failure)
+      else records.push(record)
+    }
   })
+}
+
+// The writer table and envelope of research-record@1. Body fields are checked by the full verifier.
+function contractFailure(record) {
+  const WRITERS = {
+    source: ["program", "agent", "researcher"],
+    copy: ["program"],
+    representation: ["program"],
+    fragment: ["program"],
+    claim: ["agent", "researcher"],
+    evidence: ["agent", "researcher"],
+    judgment: ["agent"],
+    decision: ["researcher"],
+    protocol: ["agent", "researcher"],
+    artifact: ["program"],
+    receipt: ["program"],
+    snapshot: ["program"],
+  }
+  if (record.contract !== "research-record@1") return "record contract must be research-record@1"
+  if (!Object.hasOwn(WRITERS, record.kind)) return "unknown record kind: " + String(record.kind)
+  if (!DIGEST.test(String(record.object))) return "record object must be a digest"
+  if (record.parent !== undefined && !DIGEST.test(String(record.parent))) return "record parent must be a digest"
+  const voice = record.author?.voice
+  if (!WRITERS[record.kind].includes(voice)) return "a " + String(voice) + " may not write a " + record.kind
+  if (typeof record.at !== "string" || Number.isNaN(Date.parse(record.at))) return "record at must be a date"
+  return undefined
 }
 
 const seenIds = new Map()
@@ -113,6 +144,11 @@ for (const record of records) {
 const byId = new Map(records.map((record) => [digestOf(record), record]))
 
 function refsOf(record) {
+  const parent = record.parent ? [{ kind: record.kind, id: record.parent }] : []
+  return [...parent, ...bodyRefs(record)]
+}
+
+function bodyRefs(record) {
   if (record.kind === "copy") return [record.body.source]
   if (record.kind === "representation") return [record.body.copy]
   if (record.kind === "fragment") return [record.body.representation]
@@ -154,11 +190,27 @@ function blobsOf(record) {
 for (const record of byId.values()) for (const digest of blobsOf(record)) blob(digest)
 for (const [id, record] of byId) {
   for (const target of refsOf(record)) {
+    if (target === null || typeof target !== "object" || typeof target.id !== "string") {
+      fail("ref", short(id), "a ref is not a kind and an id")
+      continue
+    }
     const found = byId.get(target.id)
     if (!found) fail("ref", short(id), target.kind + ":" + short(target.id) + " does not resolve to a record")
     else if (found.kind !== target.kind) fail("ref", short(id), target.kind + ":" + short(target.id) + " names a " + found.kind)
   }
 }
+// A first revision names its object by its own content; a later one keeps the object of the revision it replaces.
+for (const [id, record] of byId) {
+  if (!record.parent) {
+    if (record.object !== digestOf({ contract: record.contract, kind: record.kind, body: record.body }))
+      fail("record.object", short(id), "a first revision's object is not the digest of its content")
+    continue
+  }
+  const parent = byId.get(record.parent)
+  if (parent && parent.object !== record.object)
+    fail("record.object", short(id), "a revision names another object than the revision it replaces")
+}
+
 const REQUIRED = {
   "journal-article": [["author", "editor"], ["issued"], ["title"], ["container", "publisher"], ["DOI", "URL"]],
   "working-paper": [["author", "editor"], ["issued"], ["title"], ["container", "publisher"], ["DOI", "URL"]],

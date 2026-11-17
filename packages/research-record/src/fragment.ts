@@ -80,8 +80,9 @@ export function verifyFragment(fragment: FragmentBody, text: Uint8Array): Check 
   if (quote.length !== range.end - range.start)
     return fail("quote", `the quote is ${quote.length} bytes but the range spans ${range.end - range.start}`)
   // Compare the decoded string, so a lone surrogate cannot pass for the replacement character it encodes to.
-  if (decode(text.subarray(range.start, range.end)) !== fragment.quote)
-    return fail("quote", "the quote is not the stored bytes")
+  const stored = decodeOrUndefined(text.subarray(range.start, range.end))
+  if (stored === undefined) return fail("encoding", "the range does not fall on UTF-8 character boundaries")
+  if (stored !== fragment.quote) return fail("quote", "the quote is not the stored bytes")
 
   const before = encoder.encode(fragment.before)
   if (range.start < before.length) return fail("before", "the context before runs past the start of the text")
@@ -96,18 +97,19 @@ export function verifyFragment(fragment: FragmentBody, text: Uint8Array): Check 
   return { ok: true }
 }
 
-export function verifyFragmentBytes(fragment: FragmentBody, text: Uint8Array): Check {
-  try {
-    return verifyFragment(fragment, text)
-  } catch (error) {
-    return fail("encoding", (error as Error).message)
-  }
-}
 
 function assertRange(text: Uint8Array, start: number, end: number): void {
   if (!Number.isInteger(start) || !Number.isInteger(end)) throw new Error("a range needs integer byte offsets")
   if (start < 0 || end < start || end > text.length)
     throw new Error(`range ${start}..${end} is outside 0..${text.length}`)
+}
+
+function decodeOrUndefined(bytes: Uint8Array): string | undefined {
+  try {
+    return decoder.decode(bytes)
+  } catch {
+    return undefined
+  }
 }
 
 function decode(bytes: Uint8Array): string {
