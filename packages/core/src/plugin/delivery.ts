@@ -330,7 +330,7 @@ export const Plugin = define({
       )
 
     // A delivery an earlier process left active has no timer and nothing driving it, so stop those now; the boot check
-    // in the hook covers any that wake first. Deliveries of Sessions deleted while no instance listened are dropped.
+    // in the hook covers any that wake first. This process's own active deliveries get their timers back. Deliveries of Sessions deleted while no instance listened are dropped.
     // This assumes one server process per database, as the goal plugin does.
     yield* Effect.gen(function* () {
       let after: string | undefined
@@ -344,7 +344,9 @@ export const Plugin = define({
               const session = yield* ctx.session.get({ sessionID }).pipe(Effect.option)
               if (Option.isNone(session)) return yield* ctx.storage.remove(entry.key)
               const delivery = Option.getOrUndefined(decodeState(entry.value))
-              if (delivery?.status !== "active" || delivery.boot === boot()) return
+              if (delivery?.status !== "active") return
+              // This process's own deliveries outlive a plugin reload, which drops their timers.
+              if (delivery.boot === boot()) return yield* schedule(sessionID, delivery)
               yield* settleRestart(sessionID, delivery)
             }),
           { discard: true },

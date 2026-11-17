@@ -320,6 +320,17 @@ describe("delivery deadline", () => {
     }),
   )
 
+  it.effect("arms the timer of this process's active delivery when the plugin starts", () =>
+    Effect.gen(function* () {
+      const plugin = yield* run(active)
+
+      yield* plugin.advance(12 * minute)
+
+      expect(plugin.delivery()).toMatchObject({ status: "stopping", stoppedBy: "budget" })
+      expect(plugin.sent).toMatchObject([{ resume: true }])
+    }),
+  )
+
   it.effect("does not stop a delivery the user stopped before its deadline", () =>
     Effect.gen(function* () {
       const plugin = yield* run(active)
@@ -401,10 +412,12 @@ describe("delivery idle hook", () => {
     }),
   )
 
-  it.effect("tells the agent to wrap up when it goes idle past the deadline", () =>
+  it.effect("tells the agent to wrap up when it goes idle past a deadline its timer missed", () =>
     Effect.gen(function* () {
       const plugin = yield* run(active)
-      yield* TestClock.adjust(12 * minute)
+      // The startup timer follows the first delivery, so it leaves this one to the hook.
+      plugin.replace({ ...active, id: "delivery-2" })
+      yield* plugin.advance(12 * minute)
 
       yield* plugin.idle()
 
