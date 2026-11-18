@@ -5,7 +5,7 @@ import type { SessionIdleBackground } from "@opencode/plugin/effect/session"
 import { Delivery } from "@opencode/schema/delivery"
 import { Session } from "@opencode/schema/session"
 import { Tool } from "@opencode/schema/tool"
-import { Cause, Clock, Duration, Effect, FiberMap, Option, Schema, Stream } from "effect"
+import { Cause, Clock, Duration, Effect, FiberMap, Option, Predicate, Schema, Semaphore, Stream } from "effect"
 
 /** Continuations in a row without a tool call after which the delivery stops instead of looping until its deadline. */
 export const MAX_STALLS = 3
@@ -41,6 +41,10 @@ export const Plugin = define({
     })
 
     const timers = yield* FiberMap.make<string>()
+    // Plugin storage is a database, so a read and the write that follows can interleave with another fiber's. Every
+    // read-modify-write holds this lock, so a tool call, the idle hook, an RPC and recorded feedback each apply their
+    // change to the latest delivery instead of overwriting one another. Messages to the agent are sent outside it.
+    const lock = Semaphore.makeUnsafe(1)
 
     const rpc = yield* ctx.rpc
       .register(Delivery.Definition, {
@@ -48,60 +52,75 @@ export const Plugin = define({
         stop: (input, call) =>
           Effect.gen(function* () {
             const sessionID = Session.ID.make(input.sessionID)
-            const delivery = yield* read(sessionID)
-            if (delivery?.status === "stopping") return delivery
-            if (delivery?.status !== "active")
-              return yield* Effect.fail(call.error("inactive", "No active delivery to stop.", {}))
-            // The user's stop wins over the loop, so it writes without the loop's guard.
-            const next: State = {
-              ...delivery,
-              status: "stopping",
-              stoppedBy: "user",
-              reason: "Stopped by the user",
-              updatedAt: yield* Clock.currentTimeMillis,
-            }
-            yield* write(sessionID, next)
-            yield* FiberMap.remove(timers, sessionID)
-            yield* notify(
-              { sessionID, text: wrapUp(next), description: "Live delivery: wrapping up", resume: true },
-              next,
+            const stop = yield* lock.withPermit(
+              Effect.gen(function* () {
+                const delivery = yield* read(sessionID)
+                if (delivery?.status === "stopping") return { delivery, stopped: false }
+                if (delivery?.status !== "active")
+                  return yield* Effect.fail(call.error("inactive", "No active delivery to stop.", {}))
+                // The user's stop wins over the loop, so it writes without the loop's guard.
+                const next: State = {
+                  ...delivery,
+                  status: "stopping",
+                  stoppedBy: "user",
+                  reason: "Stopped by the user",
+                  updatedAt: yield* Clock.currentTimeMillis,
+                }
+                yield* write(sessionID, next)
+                yield* FiberMap.remove(timers, sessionID)
+                return { delivery: next, stopped: true }
+              }),
             )
-            yield* markWrapUpSent(sessionID, next)
-            return (yield* read(sessionID)) ?? next
+            if (!stop.stopped) return stop.delivery
+            yield* announceWrapUp(sessionID, stop.delivery, true)
+            return (yield* read(sessionID)) ?? stop.delivery
           }),
         extend: (input, call) =>
           Effect.gen(function* () {
             const sessionID = Session.ID.make(input.sessionID)
-            const delivery = yield* read(sessionID)
-            if (!delivery || (delivery.status !== "active" && !resumable(delivery)))
-              return yield* Effect.fail(call.error("inactive", "No delivery whose budget can be extended.", {}))
-            const now = yield* Clock.currentTimeMillis
-            const deadline = Math.min(
-              Math.max(delivery.deadline, now) + input.by,
-              delivery.startedAt + Delivery.MAX_BUDGET,
+            const extension = yield* lock.withPermit(
+              Effect.gen(function* () {
+                const delivery = yield* read(sessionID)
+                if (!delivery || (delivery.status !== "active" && !resumable(delivery)))
+                  return yield* Effect.fail(call.error("inactive", "No delivery whose budget can be extended.", {}))
+                const now = yield* Clock.currentTimeMillis
+                const deadline = Math.min(
+                  Math.max(delivery.deadline, now) + input.by,
+                  delivery.startedAt + Delivery.MAX_BUDGET,
+                )
+                if (deadline <= now)
+                  return yield* Effect.fail(call.error("inactive", "The delivery has used the longest budget.", {}))
+                // This process's own active delivery only gets more time. Any other resumes under this process, and
+                // its Session is woken, since nothing has driven it since it stopped or its process ended.
+                if (delivery.status === "active" && delivery.boot === boot()) {
+                  const next: State = { ...delivery, deadline, updatedAt: now }
+                  yield* write(sessionID, next)
+                  yield* schedule(sessionID, next)
+                  return { delivery: next, resumed: false, now }
+                }
+                const { stoppedBy: _stoppedBy, reason: _reason, wrapUpSent: _wrapUpSent, ...rest } = delivery
+                const resumed: State = { ...rest, status: "active", deadline, stalls: 0, boot: boot(), updatedAt: now }
+                yield* write(sessionID, resumed)
+                yield* schedule(sessionID, resumed)
+                return { delivery: resumed, resumed: true, now }
+              }),
             )
-            if (deadline <= now)
-              return yield* Effect.fail(call.error("inactive", "The delivery has used the longest budget.", {}))
-            if (delivery.status === "active") {
-              const next: State = { ...delivery, deadline, updatedAt: now }
-              yield* write(sessionID, next)
-              yield* schedule(sessionID, next)
-              return next
-            }
-            const { stoppedBy: _stoppedBy, reason: _reason, wrapUpSent: _wrapUpSent, ...rest } = delivery
-            const resumed: State = { ...rest, status: "active", deadline, stalls: 0, boot: boot(), updatedAt: now }
-            yield* write(sessionID, resumed)
-            yield* schedule(sessionID, resumed)
-            yield* notify(
-              {
-                sessionID,
-                text: continuation(resumed, now, [], "The user extended the budget, so the live delivery resumes."),
-                description: "Live delivery: budget extended",
-                resume: true,
-              },
-              resumed,
-            )
-            return resumed
+            if (extension.resumed)
+              yield* notify(
+                {
+                  sessionID,
+                  text: continuation(
+                    extension.delivery,
+                    extension.now,
+                    [],
+                    "The user extended the budget, so the live delivery resumes.",
+                  ),
+                  description: "Live delivery: budget extended",
+                  resume: true,
+                },
+                extension.delivery,
+              )
+            return extension.delivery
           }),
       })
       .pipe(Effect.orDie)
@@ -122,30 +141,62 @@ export const Plugin = define({
         Effect.withSpan("DeliveryPlugin.write"),
       )
 
-    // The loop's own writes apply only to the delivery they were decided on. Storage has no compare-and-set, so this
-    // re-reads first: a publish, stop or extension that landed meanwhile wins instead of being overwritten.
-    const replace = Effect.fn("DeliveryPlugin.replace")(function* (sessionID: string, expected: State, next: State) {
-      const current = yield* read(sessionID)
-      if (current?.id !== expected.id || current.updatedAt !== expected.updatedAt || current.status !== expected.status)
-        return false
-      yield* write(sessionID, next)
-      return true
+    // The loop's own writes apply only while the delivery is still the one they were decided on: a publish, stop or
+    // extension that landed meanwhile wins. The change applies to the stored delivery rather than the one decided on,
+    // so a write that landed in the same millisecond, such as recorded feedback, is kept. Returns what it wrote.
+    const replace = Effect.fn("DeliveryPlugin.replace")(function* (
+      sessionID: string,
+      expected: State,
+      change: (current: State) => State,
+    ) {
+      return yield* lock.withPermit(
+        Effect.gen(function* () {
+          const current = yield* read(sessionID)
+          if (
+            current?.id !== expected.id ||
+            current.updatedAt !== expected.updatedAt ||
+            current.status !== expected.status
+          )
+            return undefined
+          const next: State = { ...change(current), updatedAt: yield* Clock.currentTimeMillis }
+          yield* write(sessionID, next)
+          return next
+        }),
+      )
     })
 
-    // A message the agent should see. It is logged rather than failed: the state change it reports is already written.
+    // A message the agent should see. It is logged rather than failed, since the state change it reports is already
+    // written, and returns whether the message was queued.
     const notify = (
       input: { sessionID: Session.ID; text: string; description?: string; resume?: boolean },
       delivery: State,
-    ): Effect.Effect<void> =>
+    ): Effect.Effect<boolean> =>
       ctx.session.synthetic({ ...input, metadata: { source: "delivery", deliveryID: delivery.id } }).pipe(
-        Effect.asVoid,
+        Effect.as(true),
         Effect.catchCause((cause) =>
-          Effect.logWarning("failed to message a delivery's agent", { sessionID: input.sessionID, cause }),
+          Effect.logWarning("failed to message a delivery's agent", { sessionID: input.sessionID, cause }).pipe(
+            Effect.as(false),
+          ),
         ),
       )
 
-    // Stops a delivery the loop decided on and tells the agent to wrap up. `resume` wakes a Session that is idle; inside
-    // the idle hook the message continues the same execution instead.
+    // Tells the agent to wrap up, and records that only once the message is queued: a delivery whose agent was never
+    // told must not be finished for ignoring it. If the Session goes idle before then, the hook sends its own, so the
+    // worst case is a second wrap-up. `resume` wakes a Session that is idle; inside the idle hook the message continues
+    // the same execution instead.
+    const announceWrapUp = Effect.fn("DeliveryPlugin.announceWrapUp")(function* (
+      sessionID: Session.ID,
+      stopped: State,
+      resume: boolean,
+    ) {
+      const sent = yield* notify(
+        { sessionID, text: wrapUp(stopped), description: "Live delivery: wrapping up", ...(resume ? { resume } : {}) },
+        stopped,
+      )
+      if (sent) yield* replace(sessionID, stopped, (current) => ({ ...current, wrapUpSent: true }))
+    })
+
+    // Stops a delivery the loop decided on and tells the agent to wrap up.
     const halt = Effect.fn("DeliveryPlugin.halt")(function* (
       sessionID: Session.ID,
       delivery: State,
@@ -153,39 +204,23 @@ export const Plugin = define({
       reason: string,
       resume: boolean,
     ) {
-      const next: State = {
-        ...delivery,
+      const stopped = yield* replace(sessionID, delivery, (current) => ({
+        ...current,
         status: "stopping",
         stoppedBy,
         reason,
-        updatedAt: yield* Clock.currentTimeMillis,
-      }
-      if (!(yield* replace(sessionID, delivery, next))) return
-      yield* notify(
-        { sessionID, text: wrapUp(next), description: "Live delivery: wrapping up", ...(resume ? { resume } : {}) },
-        next,
-      )
-      yield* markWrapUpSent(sessionID, next)
-    })
-
-    // Recorded only once the wrap-up is queued. If the Session went idle before that, the hook saw no wrap-up yet and
-    // sent its own, so the worst case is a second wrap-up rather than finishing a delivery the agent was never told about.
-    const markWrapUpSent = Effect.fn("DeliveryPlugin.markWrapUpSent")(function* (
-      sessionID: Session.ID,
-      stopped: State,
-    ) {
-      yield* replace(sessionID, stopped, { ...stopped, wrapUpSent: true, updatedAt: yield* Clock.currentTimeMillis })
+      }))
+      if (stopped) yield* announceWrapUp(sessionID, stopped, resume)
     })
 
     // A delivery an earlier process started stops without waking its Session; extending the budget resumes it.
     const settleRestart = Effect.fn("DeliveryPlugin.settleRestart")(function* (sessionID: Session.ID, delivery: State) {
-      yield* replace(sessionID, delivery, {
-        ...delivery,
+      yield* replace(sessionID, delivery, (current) => ({
+        ...current,
         status: "stopping",
         stoppedBy: "restart",
         reason: "The server restarted while the delivery was active",
-        updatedAt: yield* Clock.currentTimeMillis,
-      })
+      }))
     })
 
     const expire = Effect.fn("DeliveryPlugin.expire")(function* (sessionID: Session.ID, deliveryID: string) {
@@ -245,18 +280,16 @@ export const Plugin = define({
       const now = yield* Clock.currentTimeMillis
 
       if (delivery.status === "stopping") {
-        if (!delivery.wrapUpSent) {
-          const next: State = { ...delivery, wrapUpSent: true, updatedAt: now }
-          if (!(yield* replace(sessionID, delivery, next))) return
-          return yield* notify({ sessionID, text: wrapUp(next), description: "Live delivery: wrapping up" }, next)
-        }
+        // A restart stops a delivery quietly, and extending the budget resumes it, so the Session's other work neither
+        // wraps it up nor finishes it.
+        if (delivery.stoppedBy === "restart") return
+        if (!delivery.wrapUpSent) return yield* announceWrapUp(sessionID, delivery, false)
         // It was told to wrap up and stopped anyway, so finish it rather than ask again.
-        return yield* replace(sessionID, delivery, {
-          ...delivery,
+        return yield* replace(sessionID, delivery, (current) => ({
+          ...current,
           status: "done",
-          summary: delivery.summary ?? "The agent stopped without calling delivery_done.",
-          updatedAt: now,
-        })
+          summary: current.summary ?? "The agent stopped without calling delivery_done.",
+        }))
       }
 
       if (now >= delivery.deadline) return yield* halt(sessionID, delivery, "budget", "The time budget ran out", false)
@@ -269,8 +302,8 @@ export const Plugin = define({
           `The agent called no tool in ${MAX_STALLS} continuations in a row`,
           false,
         )
-      const next: State = { ...delivery, stalls, updatedAt: now }
-      if (!(yield* replace(sessionID, delivery, next))) return
+      const next = yield* replace(sessionID, delivery, (current) => ({ ...current, stalls }))
+      if (!next) return
       // Only the Session's own shells wake it when they finish, so the agent hears about them instead of waiting.
       const shells = background.flatMap((work) =>
         work.kind === "shell" && work.sessionID === sessionID ? [work.command] : [],
@@ -291,26 +324,41 @@ export const Plugin = define({
 
     // The user's messages while the delivery runs are its feedback. They are kept as they arrive, so a compaction that
     // drops them from the context does not drop them from the delivery. The inbox ID becomes the message's ID.
-    const record = Effect.fn("DeliveryPlugin.record")(function* (sessionID: Session.ID, feedback: Delivery.Feedback) {
-      const delivery = yield* read(sessionID)
-      if (delivery?.status !== "active" && delivery?.status !== "stopping") return
-      if (delivery.feedback?.some((item) => item.id === feedback.id)) return
-      yield* write(sessionID, {
-        ...delivery,
-        feedback: [...(delivery.feedback ?? []), feedback],
-        updatedAt: yield* Clock.currentTimeMillis,
-      })
-    })
+    const record = Effect.fn("DeliveryPlugin.record")(
+      function* (sessionID: Session.ID, feedback: Delivery.Feedback) {
+        const delivery = yield* read(sessionID)
+        if (delivery?.status !== "active" && delivery?.status !== "stopping") return
+        if (delivery.feedback?.some((item) => item.id === feedback.id)) return
+        yield* write(sessionID, {
+          ...delivery,
+          feedback: [...(delivery.feedback ?? []), feedback],
+          updatedAt: yield* Clock.currentTimeMillis,
+        })
+      },
+      (effect) => lock.withPermit(effect),
+    )
 
-    const withdraw = Effect.fn("DeliveryPlugin.withdraw")(function* (sessionID: Session.ID, id: string) {
-      const delivery = yield* read(sessionID)
-      if (!delivery?.feedback?.some((item) => item.id === id)) return
-      yield* write(sessionID, {
-        ...delivery,
-        feedback: delivery.feedback.filter((item) => item.id !== id),
-        updatedAt: yield* Clock.currentTimeMillis,
-      })
-    })
+    const withdraw = Effect.fn("DeliveryPlugin.withdraw")(
+      function* (sessionID: Session.ID, id: string) {
+        const delivery = yield* read(sessionID)
+        if (!delivery?.feedback?.some((item) => item.id === id)) return
+        yield* write(sessionID, {
+          ...delivery,
+          feedback: delivery.feedback.filter((item) => item.id !== id),
+          updatedAt: yield* Clock.currentTimeMillis,
+        })
+      },
+      (effect) => lock.withPermit(effect),
+    )
+
+    // Drops a delivery and tells clients following it, when there is one to drop.
+    const drop = Effect.fn("DeliveryPlugin.drop")(
+      function* (sessionID: Session.ID) {
+        if ((yield* ctx.storage.get(PREFIX + sessionID)) === undefined) return
+        yield* write(sessionID, undefined)
+      },
+      (effect) => lock.withPermit(effect),
+    )
 
     yield* ctx.event
       .subscribe({ types: ["session.inbox.enqueued", "session.inbox.cancelled", "session.deleted"] })
@@ -319,7 +367,7 @@ export const Plugin = define({
           const sessionID = event.data.sessionID
           const handled =
             event.type === "session.deleted"
-              ? FiberMap.remove(timers, sessionID).pipe(Effect.andThen(ctx.storage.remove(PREFIX + sessionID)))
+              ? FiberMap.remove(timers, sessionID).pipe(Effect.andThen(drop(sessionID)))
               : event.type === "session.inbox.cancelled"
                 ? withdraw(sessionID, event.data.inboxID)
                 : event.data.item.type === "user"
@@ -339,7 +387,8 @@ export const Plugin = define({
       )
 
     // A delivery an earlier process left active has no timer and nothing driving it, so stop those now; the boot check
-    // in the hook covers any that wake first. This process's own active deliveries get their timers back. Deliveries of Sessions deleted while no instance listened are dropped.
+    // in the hook covers any that wake first. This process's own active deliveries get their timers back. Deliveries
+    // of Sessions deleted while no instance listened are dropped; one whose Session cannot be looked up is kept.
     // This assumes one server process per database, as the goal plugin does.
     yield* Effect.gen(function* () {
       let after: string | undefined
@@ -350,15 +399,24 @@ export const Plugin = define({
           (entry) =>
             Effect.gen(function* () {
               const sessionID = Session.ID.make(entry.key.slice(PREFIX.length))
-              const session = yield* ctx.session.get({ sessionID }).pipe(Effect.option)
-              if (Option.isNone(session)) return yield* ctx.storage.remove(entry.key)
+              const exists = yield* ctx.session.get({ sessionID }).pipe(
+                Effect.as(true),
+                Effect.catchIf(Predicate.isTagged("Session.NotFoundError"), () => Effect.succeed(false)),
+              )
+              if (!exists) return yield* drop(sessionID)
               const delivery = Option.getOrUndefined(decodeState(entry.value))
               if (delivery?.status !== "active") return
               // This process's own deliveries outlive a plugin reload, which drops their timers.
               if (delivery.boot === boot()) return yield* schedule(sessionID, delivery)
               yield* settleRestart(sessionID, delivery)
-            }),
-          { discard: true },
+            }).pipe(
+              Effect.catchCause((cause) =>
+                Cause.hasInterruptsOnly(cause)
+                  ? Effect.interrupt
+                  : Effect.logWarning("failed to settle a delivery at startup", { key: entry.key, cause }),
+              ),
+            ),
+          { discard: true, concurrency: 10 },
         )
         after = page.next
       } while (after !== undefined)
@@ -405,30 +463,32 @@ export const Plugin = define({
           }),
           output: Delivery.State,
           execute: (input, tool) =>
-            Effect.gen(function* () {
-              const delivery = yield* current(tool.sessionID)
-              if (delivery.status === "done") return yield* Effect.fail(failure("The delivery is done."))
-              const now = yield* Clock.currentTimeMillis
-              if (delivery.status === "stopping" || now >= delivery.deadline)
-                return yield* Effect.fail(failure(`The delivery is wrapping up. ${WRAP_UP}`))
-              const dueAt = now + input.dueInMinutes * MINUTE
-              if (dueAt > delivery.deadline)
-                return yield* Effect.fail(
-                  failure(
-                    `That is past the budget, which has ${minutes(delivery.deadline - now)} left. Plan a smaller version.`,
-                  ),
-                )
-              const next: State = {
-                ...delivery,
-                next: { title: input.title, scope: input.scope, acceptance: input.acceptance, dueAt },
-                updatedAt: now,
-              }
-              yield* write(tool.sessionID, next)
-              return {
-                output: next,
-                content: `Planned "${input.title}", due in ${minutes(dueAt - now)}. Build it, run a check for each acceptance criterion, then publish it with delivery_publish.`,
-              }
-            }),
+            lock.withPermit(
+              Effect.gen(function* () {
+                const delivery = yield* current(tool.sessionID)
+                if (delivery.status === "done") return yield* Effect.fail(failure("The delivery is done."))
+                const now = yield* Clock.currentTimeMillis
+                if (delivery.status === "stopping" || now >= delivery.deadline)
+                  return yield* Effect.fail(failure(`The delivery is wrapping up. ${WRAP_UP}`))
+                const dueAt = now + input.dueInMinutes * MINUTE
+                if (dueAt > delivery.deadline)
+                  return yield* Effect.fail(
+                    failure(
+                      `That is past the budget, which has ${minutes(delivery.deadline - now)} left. Plan a smaller version.`,
+                    ),
+                  )
+                const next: State = {
+                  ...delivery,
+                  next: { title: input.title, scope: input.scope, acceptance: input.acceptance, dueAt },
+                  updatedAt: now,
+                }
+                yield* write(tool.sessionID, next)
+                return {
+                  output: next,
+                  content: `Planned "${input.title}", due in ${minutes(dueAt - now)}. Build it, run a check for each acceptance criterion, then publish it with delivery_publish.`,
+                }
+              }),
+            ),
         })
 
         editor.add({
@@ -447,62 +507,64 @@ export const Plugin = define({
           }),
           output: Delivery.State,
           execute: (input, tool) =>
-            Effect.gen(function* () {
-              const delivery = yield* current(tool.sessionID)
-              if (delivery.status === "done") return yield* Effect.fail(failure("The delivery is done."))
-              const milestone = delivery.next
-              if (!milestone)
-                return yield* Effect.fail(
-                  failure("No version is planned. Plan it with delivery_plan before publishing."),
+            lock.withPermit(
+              Effect.gen(function* () {
+                const delivery = yield* current(tool.sessionID)
+                if (delivery.status === "done") return yield* Effect.fail(failure("The delivery is done."))
+                const milestone = delivery.next
+                if (!milestone)
+                  return yield* Effect.fail(
+                    failure("No version is planned. Plan it with delivery_plan before publishing."),
+                  )
+                const unmet = milestone.acceptance.filter(
+                  (criterion) => !input.checks.some((check) => check.name === criterion && check.passed),
                 )
-              const unmet = milestone.acceptance.filter(
-                (criterion) => !input.checks.some((check) => check.name === criterion && check.passed),
-              )
-              if (unmet.length > 0)
-                return yield* Effect.fail(
-                  failure(
-                    [
-                      "Not published. Each acceptance criterion needs a passing check with exactly its name. Missing or failing:",
-                      ...unmet.map((criterion) => `- ${criterion}`),
-                    ].join("\n"),
-                  ),
-                )
-              const answered = input.feedback ?? []
-              const known = new Set((delivery.feedback ?? []).map((item) => item.id))
-              const unknown = answered.filter((id) => !known.has(id))
-              if (unknown.length > 0)
-                return yield* Effect.fail(
-                  failure(
-                    `Not published. No feedback message has the ID ${unknown.join(", ")}; delivery_status lists them.`,
-                  ),
-                )
-              const now = yield* Clock.currentTimeMillis
-              const { next: _published, ...rest } = delivery
-              const published: State = {
-                ...rest,
-                versions: [
-                  ...delivery.versions,
-                  {
-                    number: delivery.versions.length + 1,
-                    title: milestone.title,
-                    summary: input.summary,
-                    checks: input.checks,
-                    ...(answered.length > 0 ? { feedback: answered } : {}),
-                    publishedAt: now,
-                  },
-                ],
-                updatedAt: now,
-              }
-              yield* write(tool.sessionID, published)
-              const number = published.versions.length
-              return {
-                output: published,
-                content:
-                  delivery.status === "stopping" || now >= delivery.deadline
-                    ? `Published version ${number}. The delivery is wrapping up: call delivery_done.`
-                    : `Published version ${number}. ${minutes(delivery.deadline - now)} left: compare it with the full objective and plan the next version with delivery_plan.`,
-              }
-            }),
+                if (unmet.length > 0)
+                  return yield* Effect.fail(
+                    failure(
+                      [
+                        "Not published. Each acceptance criterion needs a passing check with exactly its name. Missing or failing:",
+                        ...unmet.map((criterion) => `- ${criterion}`),
+                      ].join("\n"),
+                    ),
+                  )
+                const answered = input.feedback ?? []
+                const known = new Set((delivery.feedback ?? []).map((item) => item.id))
+                const unknown = answered.filter((id) => !known.has(id))
+                if (unknown.length > 0)
+                  return yield* Effect.fail(
+                    failure(
+                      `Not published. No feedback message has the ID ${unknown.join(", ")}; delivery_status lists them.`,
+                    ),
+                  )
+                const now = yield* Clock.currentTimeMillis
+                const { next: _published, ...rest } = delivery
+                const published: State = {
+                  ...rest,
+                  versions: [
+                    ...delivery.versions,
+                    {
+                      number: delivery.versions.length + 1,
+                      title: milestone.title,
+                      summary: input.summary,
+                      checks: input.checks,
+                      ...(answered.length > 0 ? { feedback: answered } : {}),
+                      publishedAt: now,
+                    },
+                  ],
+                  updatedAt: now,
+                }
+                yield* write(tool.sessionID, published)
+                const number = published.versions.length
+                return {
+                  output: published,
+                  content:
+                    delivery.status === "stopping" || now >= delivery.deadline
+                      ? `Published version ${number}. The delivery is wrapping up: call delivery_done.`
+                      : `Published version ${number}. ${minutes(delivery.deadline - now)} left: compare it with the full objective and plan the next version with delivery_plan.`,
+                }
+              }),
+            ),
         })
 
         editor.add({
@@ -533,31 +595,33 @@ export const Plugin = define({
           }),
           output: Delivery.State,
           execute: (input, tool) =>
-            Effect.gen(function* () {
-              const delivery = yield* current(tool.sessionID)
-              if (delivery.status === "done") return yield* Effect.fail(failure("The delivery is already done."))
-              const now = yield* Clock.currentTimeMillis
-              if (delivery.status === "active" && now < delivery.deadline)
-                return yield* Effect.fail(
-                  failure(
-                    `${minutes(delivery.deadline - now)} left. Plan and publish the next version; only the user can stop the delivery early.`,
-                  ),
-                )
-              const done: State = {
-                ...delivery,
-                status: "done",
-                reason: delivery.reason ?? "The time budget ran out",
-                summary: input.summary,
-                updatedAt: now,
-              }
-              yield* write(tool.sessionID, done)
-              yield* FiberMap.remove(timers, tool.sessionID)
-              const count = done.versions.length
-              return {
-                output: done,
-                content: `Delivery finished with ${count === 0 ? "no published version" : count === 1 ? "1 version" : `${count} versions`}.`,
-              }
-            }),
+            lock.withPermit(
+              Effect.gen(function* () {
+                const delivery = yield* current(tool.sessionID)
+                if (delivery.status === "done") return yield* Effect.fail(failure("The delivery is already done."))
+                const now = yield* Clock.currentTimeMillis
+                if (delivery.status === "active" && now < delivery.deadline)
+                  return yield* Effect.fail(
+                    failure(
+                      `${minutes(delivery.deadline - now)} left. Plan and publish the next version; only the user can stop the delivery early.`,
+                    ),
+                  )
+                const done: State = {
+                  ...delivery,
+                  status: "done",
+                  reason: delivery.reason ?? "The time budget ran out",
+                  summary: input.summary,
+                  updatedAt: now,
+                }
+                yield* write(tool.sessionID, done)
+                yield* FiberMap.remove(timers, tool.sessionID)
+                const count = done.versions.length
+                return {
+                  output: done,
+                  content: `Delivery finished with ${count === 0 ? "no published version" : count === 1 ? "1 version" : `${count} versions`}.`,
+                }
+              }),
+            ),
         })
       })
       .pipe(Effect.orDie)
@@ -599,7 +663,9 @@ function describe(delivery: State, now: number, feedback: ReadonlyArray<Delivery
     delivery.status === "done"
       ? `done: ${delivery.reason ?? "finished"}`
       : delivery.status === "stopping"
-        ? `wrapping up: ${delivery.reason ?? "stopped"}. ${WRAP_UP}`
+        ? delivery.stoppedBy === "restart"
+          ? `paused: ${delivery.reason ?? "the server restarted"}. Extending the budget resumes it.`
+          : `wrapping up: ${delivery.reason ?? "stopped"}. ${WRAP_UP}`
         : now >= delivery.deadline
           ? `the time budget ran out. ${WRAP_UP}`
           : `active, ${minutes(delivery.deadline - now)} left`

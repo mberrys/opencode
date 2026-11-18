@@ -71,9 +71,13 @@ const run = Effect.fnUntraced(function* (
   seed?: Delivery.State,
   options: {
     context?: () => ReadonlyArray<SessionMessage.Info>
+    // The Session is gone, or looking it up fails for another reason.
     missing?: boolean
-    // Runs while a message is being sent, before it is recorded.
-    sending?: () => Effect.Effect<void>
+    unavailable?: boolean
+    // Storage reads yield before returning, as a database read lets other fibers run.
+    yields?: boolean
+    // Runs while a message is being sent, before it is recorded. A failure means the message was not sent.
+    sending?: () => Effect.Effect<void, unknown>
   } = {},
 ) {
   const stored = new Map<string, Schema.Json>(seed ? [[`session:${sessionID}`, seed]] : [])
@@ -94,7 +98,11 @@ const run = Effect.fnUntraced(function* (
           (options.sending?.() ?? Effect.void).pipe(Effect.andThen(Effect.sync(() => void sent.push(input)))) as never,
         // SAFETY: the startup sweep only checks that the Session exists.
         get: (input) =>
-          options.missing ? Effect.fail(new Error("not found")) : (Effect.succeed({ id: input.sessionID }) as never),
+          options.missing
+            ? Effect.fail(new Session.NotFoundError({ sessionID: input.sessionID }))
+            : options.unavailable
+              ? Effect.fail(new Error("the database is busy"))
+              : (Effect.succeed({ id: input.sessionID }) as never),
       },
       tool: {
         // SAFETY: the plugin only declares its namespace and adds tools.
@@ -107,7 +115,8 @@ const run = Effect.fnUntraced(function* (
         hook: () => Effect.die("unused tool.hook"),
       },
       storage: {
-        get: (key) => Effect.sync(() => stored.get(key)),
+        get: (key) =>
+          Effect.sync(() => stored.get(key)).pipe(Effect.tap(() => (options.yields ? Effect.yieldNow : Effect.void))),
         set: (key, value) => Effect.sync(() => void stored.set(key, value)),
         remove: (key) => Effect.sync(() => void stored.delete(key)),
         scan: (input) =>
@@ -303,9 +312,11 @@ describe("delivery plugin", () => {
 
       yield* plugin.emit(deleted(Session.ID.make("ses_other")))
       expect(plugin.delivery()).toEqual(active)
+      expect(plugin.changed).toEqual([])
 
       yield* plugin.emit(deleted(sessionID))
       expect(plugin.delivery()).toBeUndefined()
+      expect(plugin.changed).toEqual([{ sessionID, delivery: null }])
     }),
   )
 
@@ -462,12 +473,12 @@ describe("delivery idle hook", () => {
 
   it.effect("tells a stopping agent to wrap up once, then finishes the delivery when it stops again", () =>
     Effect.gen(function* () {
-      const plugin = yield* run({ ...active, status: "stopping", stoppedBy: "restart", reason: "Restarted" })
+      const plugin = yield* run({ ...active, status: "stopping", stoppedBy: "budget", reason: "Out of time" })
 
       yield* plugin.idle()
       expect(plugin.delivery()?.wrapUpSent).toBe(true)
       expect(plugin.sent).toMatchObject([
-        { text: expect.stringContaining("The live delivery is wrapping up: Restarted.") },
+        { text: expect.stringContaining("The live delivery is wrapping up: Out of time.") },
       ])
 
       yield* plugin.idle()
@@ -495,6 +506,70 @@ describe("delivery idle hook", () => {
 
       expect(plugin.delivery()).toEqual(published)
       expect(plugin.sent).toEqual([])
+    }),
+  )
+
+  it.effect("keeps a delivery a restart stopped quiet when its Session goes idle, so an extension can resume it", () =>
+    Effect.gen(function* () {
+      const plugin = yield* run({ ...active, boot: "an-earlier-process" })
+
+      yield* plugin.idle()
+      yield* plugin.idle()
+
+      expect(plugin.delivery()).toMatchObject({ status: "stopping", stoppedBy: "restart" })
+      expect(plugin.sent).toEqual([])
+      expect((yield* plugin.tool("status", {})).content).toContain(
+        "Status: paused: The server restarted while the delivery was active. Extending the budget resumes it.",
+      )
+      expect((yield* plugin.extend(5 * minute)).status).toBe("active")
+    }),
+  )
+
+  it.effect("does not record a wrap-up that failed to send, and sends it again when the Session goes idle", () =>
+    Effect.gen(function* () {
+      let failures = 1
+      const plugin = yield* run(active, {
+        sending: () => (failures-- > 0 ? Effect.fail(new Error("the Session is closing")) : Effect.void),
+      })
+
+      yield* plugin.stop()
+      expect(plugin.delivery()).toMatchObject({ status: "stopping", stoppedBy: "user" })
+      expect(plugin.delivery()?.wrapUpSent).toBeUndefined()
+      expect(plugin.sent).toEqual([])
+
+      yield* plugin.idle()
+      expect(plugin.delivery()).toMatchObject({ status: "stopping", wrapUpSent: true })
+      expect(plugin.sent).toMatchObject([{ text: expect.stringContaining("The live delivery is wrapping up") }])
+    }),
+  )
+
+  it.effect("keeps feedback that arrives while the wrap-up is sent", () =>
+    Effect.gen(function* () {
+      let plugin: Effect.Success<ReturnType<typeof run>> | undefined
+      plugin = yield* run(active, {
+        sending: () => plugin?.emit(enqueued("msg_faster", "user", "Faster", 0)) ?? Effect.void,
+      })
+
+      yield* plugin.stop()
+
+      expect(plugin.delivery()).toMatchObject({
+        wrapUpSent: true,
+        feedback: [{ id: "msg_faster", text: "Faster", at: 0 }],
+      })
+    }),
+  )
+
+  it.effect("keeps a delivery whose Session it cannot look up at startup, and resumes it when extended", () =>
+    Effect.gen(function* () {
+      const plugin = yield* run({ ...active, boot: "an-earlier-process" }, { unavailable: true })
+      expect(plugin.delivery()).toMatchObject({ status: "active", boot: "an-earlier-process" })
+
+      const resumed = yield* plugin.extend(5 * minute)
+
+      expect(resumed).toMatchObject({ status: "active", boot: DeliveryPlugin.boot(), deadline: 17 * minute })
+      expect(plugin.sent).toMatchObject([
+        { text: expect.stringContaining("The user extended the budget"), resume: true },
+      ])
     }),
   )
 })
@@ -559,6 +634,32 @@ describe("delivery tools", () => {
           ),
         ),
       ).toBe("That is past the budget, which has 10 minutes left. Plan a smaller version.")
+    }),
+  )
+
+  it.effect("keep a plan and feedback that are written at the same time", () =>
+    Effect.gen(function* () {
+      const plugin = yield* run(active, { yields: true })
+
+      yield* Effect.all(
+        [
+          plugin.emit(enqueued("msg_blue", "user", "Make it blue", 0)),
+          plugin.tool("plan", {
+            title: milestone.title,
+            scope: milestone.scope,
+            acceptance: milestone.acceptance,
+            dueInMinutes: 4,
+          }),
+        ],
+        { concurrency: "unbounded" },
+      )
+      // The feedback write waits for the plan's to finish.
+      yield* Effect.forEach(Array.from({ length: 10 }), () => Effect.yieldNow, { discard: true })
+
+      expect(plugin.delivery()).toMatchObject({
+        next: milestone,
+        feedback: [{ id: "msg_blue", text: "Make it blue", at: 0 }],
+      })
     }),
   )
 
