@@ -22,6 +22,11 @@ const FEEDBACK_PREVIEW = 300
 // Created on first use: Workers forbid random values while a module loads.
 let processBoot: string | undefined
 export const boot = () => (processBoot ??= crypto.randomUUID())
+// Plugin storage is a database, so a read and the write that follows can interleave with another fiber's. Every
+// read-modify-write holds this lock, so a tool call, the idle hook, an RPC and recorded feedback each apply their change
+// to the latest delivery instead of overwriting one another. Messages to the agent are sent outside it. It is one per
+// process because each Location runs its own instance of the plugin over the same storage.
+const lock = Semaphore.makeUnsafe(1)
 
 const WRAP_UP = "Start no new scope. Publish a version that is already usable, then call delivery_done."
 
@@ -41,10 +46,6 @@ export const Plugin = define({
     })
 
     const timers = yield* FiberMap.make<string>()
-    // Plugin storage is a database, so a read and the write that follows can interleave with another fiber's. Every
-    // read-modify-write holds this lock, so a tool call, the idle hook, an RPC and recorded feedback each apply their
-    // change to the latest delivery instead of overwriting one another. Messages to the agent are sent outside it.
-    const lock = Semaphore.makeUnsafe(1)
 
     const rpc = yield* ctx.rpc
       .register(Delivery.Definition, {
@@ -468,6 +469,10 @@ export const Plugin = define({
                 const delivery = yield* current(tool.sessionID)
                 if (delivery.status === "done") return yield* Effect.fail(failure("The delivery is done."))
                 const now = yield* Clock.currentTimeMillis
+                if (delivery.status === "stopping" && delivery.stoppedBy === "restart")
+                  return yield* Effect.fail(
+                    failure("The delivery is paused because the server restarted. Extending the budget resumes it."),
+                  )
                 if (delivery.status === "stopping" || now >= delivery.deadline)
                   return yield* Effect.fail(failure(`The delivery is wrapping up. ${WRAP_UP}`))
                 const dueAt = now + input.dueInMinutes * MINUTE

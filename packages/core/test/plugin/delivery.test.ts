@@ -521,6 +521,12 @@ describe("delivery idle hook", () => {
       expect((yield* plugin.tool("status", {})).content).toContain(
         "Status: paused: The server restarted while the delivery was active. Extending the budget resumes it.",
       )
+      const plan = yield* Effect.exit(
+        plugin.tool("plan", { title: "Next", scope: "More", acceptance: ["works"], dueInMinutes: 1 }),
+      )
+      expect(Exit.isFailure(plan) ? Option.getOrUndefined(Exit.findErrorOption(plan)) : undefined).toMatchObject({
+        message: "The delivery is paused because the server restarted. Extending the budget resumes it.",
+      })
       expect((yield* plugin.extend(5 * minute)).status).toBe("active")
     }),
   )
