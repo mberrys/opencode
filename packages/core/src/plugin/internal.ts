@@ -106,6 +106,7 @@ import { IdentityPlugin } from "./identity.js"
 import { ForkNoticePlugin } from "./fork-notice.js"
 import { PlanPlugin } from "./plan.js"
 import { GoalPlugin } from "./goal.js"
+import { DeliveryPlugin } from "./delivery.js"
 import { ModelsDevPlugin } from "./models-dev.js"
 import { McpCodeModeDefaultsPlugin } from "./mcp-codemode-defaults.js"
 import { ProviderPlugins } from "./provider.js"
@@ -253,6 +254,14 @@ const Research = {
   }),
 }
 
+const Delivery = {
+  id: DeliveryPlugin.Plugin.id,
+  effect: Effect.fn("DeliveryPlugin")(function* (ctx: PluginContext) {
+    if (!(yield* Flag.enabled("live_delivery"))) return
+    yield* DeliveryPlugin.Plugin.effect(ctx)
+  }),
+}
+
 const pre = [
   ToolInputRepairPlugin.Plugin,
   ConfigWorktreePlugin.Plugin,
@@ -265,6 +274,7 @@ const pre = [
   PlanPlugin.Plugin,
   CommandPlugin.Plugin,
   GoalPlugin.Plugin,
+  Delivery,
   SkillPlugin.Plugin,
   VcsHgPlugin.Plugin,
   ModelsDevPlugin,
