@@ -13,9 +13,9 @@ The research record on disk: content-addressed blobs and a hash-chained commit l
 
 ## Blobs
 
-`admit(bytes)` returns `{ digest, existed }`. The bytes are written to a staged file, flushed, hashed, and only then hard-linked to their name, so a name always holds complete bytes. Identical bytes are stored once. A name that holds other bytes is never overwritten. Admission happens outside any transaction; bytes no commit references stay unreadable (`blob-unreferenced`).
+`admit(bytes)` returns `{ digest, existed }`. The bytes are written to a staged file, flushed, hashed, and only then hard-linked to their name, so a name always holds complete bytes. Where the filesystem has no hard links (FAT, exFAT, some network shares), the checked staged file is renamed into place instead. Identical bytes are stored once. A name that holds other bytes is never overwritten. Admission happens outside any transaction; bytes no commit references stay unreadable (`blob-unreferenced`).
 
-On open, staged files of dead processes, or older than a day, are removed; a file that vanishes or is held open meanwhile is left alone. Nothing deletes blobs yet: there is no garbage collection.
+On open, staged files of dead processes, or older than a day, are removed, including ones named with the opening process's own pid, which a restart under the same pid can leave; a file that vanishes or is held open meanwhile is left alone. Nothing deletes blobs yet: there is no garbage collection.
 
 ## Commits
 
@@ -23,7 +23,7 @@ On open, staged files of dead processes, or older than a day, are removed; a fil
 
 1. Each revision is parsed, its id checked against its content, and its project checked.
 2. Every blob the revisions need (`ResearchRecord.blobs`) must be admitted and intact; every fragment's quote must equal its stored text. Hashing happens here, before the write lock.
-3. Under `BEGIN IMMEDIATE`: revisions already committed return their commit with `replayed: true`, whatever key the retry carries; new revisions under a key already used are refused with `idempotency-conflict`, naming the commit the key made. Then `Graph.make` over the whole record plus the new revisions enforces every contract rule, and the rows are written.
+3. Under `BEGIN IMMEDIATE`: revisions already committed together return their commit with `replayed: true`, whatever key the retry carries, in any order and even if only some are resent; new revisions under a key already used are refused with `idempotency-conflict`, naming the commit the key made. Then `Graph.make` over the whole record plus the new revisions enforces every contract rule, and the rows are written.
 
 A refusal writes nothing and takes no sequence number. Concurrent writers, in one process or several, queue on SQLite's lock; one held past the busy timeout is refused with `writer-busy`.
 
@@ -52,6 +52,8 @@ Revision content is covered through the ids. `blob_refs` is an index derived fro
 | The blob index and every needed blob                             | `blob-refs-mismatch`, `blob-missing`, `blob-corrupt`, `size-mismatch`                 |
 | Every contract rule, located at the first commit that breaks one | `history-invalid`                                                                     |
 | Every fragment's quote against its stored text                   | `fragment-mismatch`                                                                   |
+
+Each blob is read once, so one that changes or vanishes while verify runs is reported, not thrown. Quotes are checked even when a contract rule breaks elsewhere; only the check that a fragment's representation names its digest needs the whole history to hold.
 
 Deleting the newest commits leaves a valid record; only `headDigest` shows it, so it is what an outside reader pins.
 
