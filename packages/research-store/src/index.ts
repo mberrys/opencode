@@ -1,6 +1,8 @@
 export { Blobs } from "./blobs.js"
+export { Bundle } from "./bundle.js"
 export { Chain } from "./chain.js"
 export { StoreError, type StoreErrorCode } from "./error.js"
 export { Layout } from "./layout.js"
+export { Replay } from "./replay.js"
 export { Store } from "./store.js"
 export { Verify } from "./verify.js"
