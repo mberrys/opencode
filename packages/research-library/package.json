@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@opencode/research-library",
+  "version": "2.3.0",
+  "private": true,
+  "description": "The research library: adds works to the research record and finds passages in their text",
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "bun test --only-failures",
+    "typecheck": "bun check --no-script",
+    "typecheck:tsc": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@opencode/research-record": "workspace:*",
+    "@opencode/research-store": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@tsconfig/bun": "catalog:",
+    "@types/bun": "catalog:",
+    "@typescript/native": "catalog:",
+    "typescript": "catalog:"
+  }
+}
