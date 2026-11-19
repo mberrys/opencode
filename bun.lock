@@ -634,6 +634,19 @@
         "typescript": "catalog:",
       },
     },
+    "packages/research-store": {
+      "name": "@opencode/research-store",
+      "version": "2.3.0",
+      "dependencies": {
+        "@opencode/research-record": "workspace:*",
+      },
+      "devDependencies": {
+        "@tsconfig/bun": "catalog:",
+        "@types/bun": "catalog:",
+        "@typescript/native": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
     "packages/schema": {
       "name": "@opencode/schema",
       "version": "2.3.0",
@@ -1882,6 +1895,8 @@
     "@opencode/research": ["@opencode/research@workspace:packages/research"],
 
     "@opencode/research-record": ["@opencode/research-record@workspace:packages/research-record"],
+
+    "@opencode/research-store": ["@opencode/research-store@workspace:packages/research-store"],
 
     "@opencode/schema": ["@opencode/schema@workspace:packages/schema"],
 

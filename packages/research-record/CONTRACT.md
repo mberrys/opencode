@@ -123,6 +123,21 @@ A decision's `objectId` is derived from its `type` and subject, so the object's 
 
 ## Derived, never stored
 
+### Blobs a revision needs
+
+`ResearchRecord.blobs(revision)` lists the stored files a revision needs, sorted and unique. The store refuses a commit until each is admitted, and `verify` checks each is present and intact.
+
+| Digest field                                                                                                                                            | Required blob                                                                       |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `source` field origins: a service's `response`, a file's `copy`                                                                                         | Yes                                                                                 |
+| `copy.blob`; `representation.blob` and `tree`; `fragment.representationDigest`; `artifact.output`                                                       | Yes                                                                                 |
+| Every `Blob` in a receipt step: tool `input` and `output`, `script`, call inputs and outputs, `result`, model `request` and `response`, command `input` | Yes, except `"none"` and a call output that is an error                             |
+| `SkillPin.digest`                                                                                                                                       | No. It digests a file map; how skill files stay reachable is a later layer's choice |
+| `LensPin.digest`                                                                                                                                        | No. The manifest is an artifact's output, required there                            |
+| `lens-works-missing.missing`                                                                                                                            | No. Those works are absent by definition                                            |
+
+A test walks every vector body and fails on a digest that is neither listed nor exempt.
+
 ### Effective citation
 
 A source's citation fields come from its program revision, overridden by attested researcher `metadata` decisions, then by agent `metadata` judgments where neither has the field. Within one voice the latest commit wins. A field from a judgment carries the `agent-metadata` flag.

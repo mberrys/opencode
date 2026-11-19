@@ -454,6 +454,38 @@ export function refs(revision: Preimage): readonly Dependency[] {
 }
 
 /**
+ * The stored files a revision needs, sorted and unique: the store refuses a commit until each is admitted, and
+ * `verify` checks each is present and intact. Not included: pin digests (a skill pin is the digest of a file map, and
+ * a lens pin's manifest is an artifact's output, required there) and the works a `lens-works-missing` refusal names,
+ * which are absent by definition.
+ */
+export function blobs(revision: Preimage): readonly Canonical.Digest[] {
+  const of = (blob: Blob | "none") => (blob === "none" ? [] : [blob.digest])
+  const found = (() => {
+    if (revision.kind === "source")
+      return Object.values(revision.body.fields).map((field) =>
+        field.origin.by === "service" ? field.origin.response : field.origin.copy,
+      )
+    if (revision.kind === "copy") return [revision.body.blob]
+    if (revision.kind === "representation") return [revision.body.blob, revision.body.tree.digest]
+    if (revision.kind === "fragment") return [revision.body.representationDigest]
+    if (revision.kind === "artifact") return [revision.body.output.digest]
+    if (revision.kind !== "receipt") return []
+    const step = revision.body.step
+    if (step.kind === "tool") return [...of(step.input), ...of(step.output)]
+    if (step.kind === "script")
+      return [
+        ...of(step.script),
+        ...step.calls.flatMap((call) => [...of(call.input), ...("error" in call.output ? [] : of(call.output))]),
+        ...of(step.result),
+      ]
+    if (step.kind === "model") return [...of(step.request), ...of(step.response)]
+    return of(step.input)
+  })()
+  return [...new Set(found)].toSorted() as Canonical.Digest[]
+}
+
+/**
  * What an object is about, which no revision may change: a judgment's type and target, and the claim an evidence
  * object supports. Decisions need no entry, because their object id is derived from the same thing.
  */
