@@ -9,10 +9,8 @@ const [mode, directory, ...rest] = process.argv.slice(2)
 
 if (mode === "kill") {
   const [name, afterHits, markerFile] = rest
-  const store = Store.open(directory, {
-    projectId: PROJECT,
-    failpoint: { name: name as Failpoint.Name, afterHits: Number(afterHits), markerFile },
-  })
+  Failpoint.configure({ name: name as Failpoint.Name, afterHits: Number(afterHits), markerFile })
+  const store = Store.open(directory, { projectId: PROJECT })
   console.log(`ready ${process.pid}`)
   for (let index = 0; ; index += 1) {
     const { bytes, revisions } = paper(`k${index}`)

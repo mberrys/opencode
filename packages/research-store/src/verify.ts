@@ -2,11 +2,11 @@ export * as Verify from "./verify.js"
 
 import type { Database } from "bun:sqlite"
 import { Canonical, Fragment, Graph, ResearchRecord } from "@opencode/research-record"
-import fs from "node:fs"
 import { Blobs } from "./blobs.js"
 import { Chain } from "./chain.js"
 import { messageOf } from "./error.js"
 import { Layout } from "./layout.js"
+import { Tables } from "./tables.js"
 
 export type Reason =
   /** A commit's sequence number is not one more than the commit before it: a commit was removed or reordered. */
@@ -57,15 +57,6 @@ export interface Verification {
   readonly problems: readonly Problem[]
 }
 
-interface CommitRow {
-  readonly seq: number
-  readonly prev: string
-  readonly digest: string
-  readonly key: string | null
-  readonly request: string
-  readonly revisions: string
-}
-
 interface RevisionRow {
   readonly revision_id: string
   readonly seq: number
@@ -86,7 +77,7 @@ export function run(db: Database, layout: Layout.Layout, projectId: string): Ver
   const listed = new Map<string, number>()
   const genesis = Chain.genesis(projectId)
   const head = db
-    .query<CommitRow, []>("SELECT * FROM commits ORDER BY seq")
+    .query<Tables.CommitRow, []>("SELECT * FROM commits ORDER BY seq")
     .all()
     .reduce(
       (previous, row) => {
@@ -153,44 +144,68 @@ export function run(db: Database, layout: Layout.Layout, projectId: string): Ver
   ;[...needed].filter((item) => !indexed.has(item)).forEach((item) => report(blobRef(item)))
   ;[...indexed].filter((item) => !needed.has(item)).forEach((item) => report(blobRef(item)))
 
-  const blobs = new Map<string, Blobs.Check>()
+  // Each blob is read once, and that read decides both whether it is intact and what is checked against it: a file
+  // that changes or vanishes while verify runs is reported, never thrown. A quoted text is kept for its quotes; any
+  // other blob is only hashed and measured.
+  const quoted = new Set(
+    entries.flatMap((entry) => (entry.revision.kind === "fragment" ? [entry.revision.body.representationDigest] : [])),
+  )
+  const texts = new Map<string, Uint8Array>()
+  const sizes = new Map<string, number>()
+  const seen = new Set<string>()
   entries.forEach((entry) =>
     ResearchRecord.blobs(entry.revision).forEach((digest) => {
-      if (blobs.has(digest)) return
-      const found = Blobs.check(Layout.blobPath(layout, digest), digest)
-      blobs.set(digest, found)
-      if (found === "missing") report({ reason: "blob-missing", seq: entry.seq, digest })
-      if (found === "corrupt") report({ reason: "blob-corrupt", seq: entry.seq, digest })
+      if (seen.has(digest)) return
+      seen.add(digest)
+      const damaged = (check: Blobs.Check) =>
+        report({ reason: check === "missing" ? "blob-missing" : "blob-corrupt", seq: entry.seq, digest })
+      if (quoted.has(digest)) {
+        const text = Blobs.load(layout, digest)
+        if (typeof text === "string") return damaged(text)
+        texts.set(digest, text)
+        sizes.set(digest, text.length)
+        return
+      }
+      const found = Blobs.measure(Layout.blobPath(layout, digest), digest)
+      if (found.check !== "valid") return damaged(found.check)
+      sizes.set(digest, found.size)
     }),
   )
   entries.forEach((entry) => {
     const revision = entry.revision
-    if (revision.kind !== "copy" || blobs.get(revision.body.blob) !== "valid") return
-    if (fs.statSync(Layout.blobPath(layout, revision.body.blob)).size !== revision.body.size)
+    if (revision.kind !== "copy") return
+    const size = sizes.get(revision.body.blob)
+    if (size !== undefined && size !== revision.body.size)
       report({ reason: "size-mismatch", seq: entry.seq, revisionId: revision.revisionId })
   })
 
+  // A quote is checked against its text even when the history breaks a rule elsewhere, so one damaged commit cannot
+  // hide an edited quote. With a valid graph the fragment's representation is checked too.
   const graph = build(projectId, entries, report)
-  if (graph !== undefined) {
-    const texts = new Map<string, Uint8Array>()
-    entries.forEach((entry) => {
-      const revision = entry.revision
-      if (revision.kind !== "fragment" || blobs.get(revision.body.representationDigest) !== "valid") return
-      const digest = revision.body.representationDigest
-      const bytes = texts.get(digest) ?? Blobs.read(layout, digest)
-      texts.set(digest, bytes)
-      try {
-        Fragment.verify({ graph, fragment: ResearchRecord.refOf(revision), bytes })
-      } catch (error) {
-        report({
-          reason: "fragment-mismatch",
-          seq: entry.seq,
-          revisionId: revision.revisionId,
-          message: messageOf(error),
-        })
-      }
-    })
-  }
+  entries.forEach((entry) => {
+    const revision = entry.revision
+    if (revision.kind !== "fragment") return
+    const bytes = texts.get(revision.body.representationDigest)
+    if (bytes === undefined) return
+    try {
+      Fragment.verify(
+        graph === undefined
+          ? {
+              representationDigest: revision.body.representationDigest as Canonical.Digest,
+              selector: revision.body.selector,
+              bytes,
+            }
+          : { graph, fragment: ResearchRecord.refOf(revision), bytes },
+      )
+    } catch (error) {
+      report({
+        reason: "fragment-mismatch",
+        seq: entry.seq,
+        revisionId: revision.revisionId,
+        message: messageOf(error),
+      })
+    }
+  })
 
   return { ok: problems.length === 0, headSeq: head.seq, headDigest: head.digest, problems }
 }

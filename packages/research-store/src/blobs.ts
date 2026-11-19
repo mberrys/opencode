@@ -4,7 +4,7 @@ import { Canonical } from "@opencode/research-record"
 import { createHash, randomBytes } from "node:crypto"
 import fs from "node:fs"
 import path from "node:path"
-import { StoreError } from "./error.js"
+import { StoreError, codeOf } from "./error.js"
 import { Failpoint } from "./failpoint.js"
 import { Layout } from "./layout.js"
 
@@ -18,7 +18,7 @@ export interface Admitted {
 
 /** The two filesystem steps of admission, replaceable so tests can force the errors Windows raises. */
 export interface Ops {
-  /** Installs a complete file under a new name, never replacing an existing one. */
+  /** Installs a complete file under a new name, never replacing an existing one: a hard link. */
   readonly install: (from: string, to: string) => void
   /** Hashes a file and compares it with `digest`. */
   readonly check: (file: string, digest: Canonical.Digest) => Check
@@ -65,15 +65,23 @@ export function admit(layout: Layout.Layout, bytes: Uint8Array, ops: Ops = defau
 
 /** Hashes the file at `file`. A directory or other non-file under a blob name is corrupt, not missing. */
 export function check(file: string, digest: Canonical.Digest): Check {
+  return measure(file, digest).check
+}
+
+/** Hashes the file at `file` and returns its size from the same read, so the two cannot disagree. */
+export function measure(file: string, digest: Canonical.Digest): { readonly check: Check; readonly size: number } {
   const handle = open(file)
-  if (handle === undefined) return "missing"
+  if (handle === undefined) return { check: "missing", size: 0 }
   try {
-    if (!fs.fstatSync(handle).isFile()) return "corrupt"
+    if (!fs.fstatSync(handle).isFile()) return { check: "corrupt", size: 0 }
     const hash = createHash("sha256")
     const buffer = Buffer.alloc(128 * 1024)
-    for (let count = fs.readSync(handle, buffer); count > 0; count = fs.readSync(handle, buffer))
+    let size = 0
+    for (let count = fs.readSync(handle, buffer); count > 0; count = fs.readSync(handle, buffer)) {
       hash.update(buffer.subarray(0, count))
-    return `sha256:${hash.digest("hex")}` === digest ? "valid" : "corrupt"
+      size += count
+    }
+    return { check: `sha256:${hash.digest("hex")}` === digest ? "valid" : "corrupt", size }
   } finally {
     fs.closeSync(handle)
   }
@@ -82,16 +90,23 @@ export function check(file: string, digest: Canonical.Digest): Check {
 /** The bytes of a stored blob, re-hashed as they are read. A flipped byte is refused. */
 export function read(layout: Layout.Layout, digest: string) {
   if (!Canonical.isDigest(digest)) throw new StoreError("invalid-argument", "a blob is read by its sha256 digest")
-  const bytes = readFile(Layout.blobPath(layout, digest))
-  if (bytes === undefined) throw new StoreError("blob-missing", `the blob ${digest} is missing`)
-  if (Canonical.blobDigest(bytes) !== digest)
-    throw new StoreError("blob-corrupt", `the blob ${digest} does not match its digest`)
+  const bytes = load(layout, digest)
+  if (bytes === "missing") throw new StoreError("blob-missing", `the blob ${digest} is missing`)
+  if (bytes === "corrupt") throw new StoreError("blob-corrupt", `the blob ${digest} does not match its digest`)
   return bytes
+}
+
+/** The bytes of a stored blob, checked against its digest in the one read, or why they cannot be had. */
+export function load(layout: Layout.Layout, digest: Canonical.Digest): Uint8Array | Exclude<Check, "valid"> {
+  const bytes = readFile(Layout.blobPath(layout, digest))
+  if (typeof bytes === "string") return bytes
+  return Canonical.blobDigest(bytes) === digest ? bytes : "corrupt"
 }
 
 /**
  * Removes staged files left by processes that are no longer running, or older than a day, and returns their pids.
- * A killed admission leaves its staged file behind; a live one keeps its own.
+ * A killed admission leaves its staged file behind; a live one keeps its own. Files named with this process's pid
+ * follow the same rule: a container restarts under the same pid, so they may be an earlier run's.
  */
 export function sweep(layout: Layout.Layout): readonly number[] {
   if (!fs.existsSync(layout.staging)) return []
@@ -99,7 +114,7 @@ export function sweep(layout: Layout.Layout): readonly number[] {
   fs.readdirSync(layout.staging).forEach((name) => {
     const pid = Number(/^(\d+)-[0-9a-f]+\.tmp$/.exec(name)?.[1])
     const file = path.join(layout.staging, name)
-    if (!Number.isSafeInteger(pid) || pid === process.pid) return
+    if (!Number.isSafeInteger(pid)) return
     // A live admission may finish, and remove its file, between the listing and this look.
     const stat = fs.statSync(file, { throwIfNoEntry: false })
     if (stat === undefined || (alive(pid) && Date.now() - stat.mtimeMs < STALE_MS)) return
@@ -151,14 +166,15 @@ function place(staged: string, target: string, digest: Canonical.Digest, ops: Op
     ops.install(staged, target)
   } catch (error) {
     // Another admission of the same bytes may have installed them first. Reuse that copy only if it checks.
-    if (!RACE_CODES.includes(codeOf(error)) || !reuse(target, digest, ops)) throw error
+    if (RACE_CODES.includes(codeOf(error)) && reuse(target, digest, ops)) return syncDirectory(directory)
+    // Nothing holds the name, so the link itself failed: FAT, exFAT and some network shares have no hard links, and
+    // each raises its own error. The staged file is already flushed and checked, so it is renamed into place.
+    if (fs.existsSync(target)) throw error
+    fs.renameSync(staged, target)
   }
-  // The linked name shares the staged file's data, which was flushed before the link; only the new name needs flushing.
+  // The new name holds the staged file's own data, which was flushed and checked before it was installed, so only the
+  // name needs flushing; reading the bytes back would hash the same data again.
   syncDirectory(directory)
-  if (ops.check(target, digest) === "valid") return
-  fs.rmSync(target, { force: true })
-  syncDirectory(directory)
-  throw new StoreError("blob-corrupt", "the installed bytes failed their read-back check")
 }
 
 /** The directories from the topmost one that does not exist down to `directory`, in creation order. */
@@ -190,13 +206,13 @@ function open(file: string) {
   }
 }
 
-function readFile(file: string) {
+function readFile(file: string): Uint8Array | Exclude<Check, "valid"> {
   try {
     return new Uint8Array(fs.readFileSync(file))
   } catch (error) {
-    if (codeOf(error) === "ENOENT") return undefined
+    if (codeOf(error) === "ENOENT") return "missing"
     // A directory under a blob name is damage, as `check` reports it.
-    if (codeOf(error) === "EISDIR") throw new StoreError("blob-corrupt", `${file} is not a file`)
+    if (codeOf(error) === "EISDIR") return "corrupt"
     throw error
   }
 }
@@ -208,9 +224,4 @@ function alive(pid: number) {
   } catch (error) {
     return codeOf(error) === "EPERM"
   }
-}
-
-function codeOf(error: unknown) {
-  if (typeof error !== "object" || error === null || !("code" in error)) return ""
-  return String(error.code)
 }

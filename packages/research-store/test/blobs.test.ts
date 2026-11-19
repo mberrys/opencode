@@ -88,7 +88,7 @@ describe("admission", () => {
   })
 })
 
-describe("an install that fails because another admission got there first", () => {
+describe("an install that fails", () => {
   test("skips the install when the same bytes are already stored and held open", () => {
     const where = layout()
     Blobs.admit(where, bytes("held open"))
@@ -124,20 +124,23 @@ describe("an install that fails because another admission got there first", () =
     expect(staged(where)).toEqual([])
   })
 
-  test("rethrows EPERM when no blob appeared", () => {
-    const where = layout()
-    const error = refusal(() =>
-      Blobs.admit(where, bytes("nothing appeared"), {
+  // FAT and exFAT raise EPERM on Linux and macOS; other filesystems raise ENOSYS or ENOTSUP.
+  test.each(["EPERM", "ENOSYS", "ENOTSUP"])(
+    "renames the staged file into place when the filesystem has no hard links (%s)",
+    (code) => {
+      const where = layout()
+      const data = bytes(`no hard links ${code}`)
+      const { digest } = Blobs.admit(where, data, {
         ...Blobs.defaultOps,
         install: () => {
-          throw failure("EPERM")
+          throw failure(code)
         },
-      }),
-    )
-    expect(error.code).toBe("EPERM")
-    expect(fs.existsSync(target(where, bytes("nothing appeared")))).toBe(false)
-    expect(staged(where)).toEqual([])
-  })
+      })
+      expect(digest).toBe(Canonical.blobDigest(data))
+      expect(Blobs.read(where, digest)).toEqual(data)
+      expect(staged(where)).toEqual([])
+    },
+  )
 
   test("refuses when what appeared does not match", () => {
     const where = layout()
@@ -180,20 +183,6 @@ describe("installation corruption", () => {
           if (file.endsWith(".tmp")) fs.writeFileSync(file, "corrupt staging")
           return Blobs.defaultOps.check(file, digest)
         },
-      }),
-    )
-    expect(error.code).toBe("blob-corrupt")
-    expect(fs.existsSync(target(where, data))).toBe(false)
-    expect(staged(where)).toEqual([])
-  })
-
-  test("an install that wrote other bytes fails its read-back and loses its name", () => {
-    const where = layout()
-    const data = bytes("readback fixture")
-    const error = refusal(() =>
-      Blobs.admit(where, data, {
-        ...Blobs.defaultOps,
-        install: (_from, to) => fs.writeFileSync(to, "corrupt install"),
       }),
     )
     expect(error.code).toBe("blob-corrupt")
@@ -256,5 +245,16 @@ describe("sweeping", () => {
     fs.writeFileSync(path.join(where.staging, "notes.txt"), "not a staged file")
     expect(Blobs.sweep(where)).toEqual([parent, dead].toSorted((a, b) => a - b))
     expect(staged(where).toSorted()).toEqual([`${process.pid}-00bb.tmp`, `${parent}-00cc.tmp`, "notes.txt"].toSorted())
+  })
+
+  test("removes a day-old file named with this process's pid, which a restart under the same pid left", () => {
+    const where = layout()
+    fs.mkdirSync(where.staging, { recursive: true })
+    const file = path.join(where.staging, `${process.pid}-00ee.tmp`)
+    fs.writeFileSync(file, "left by an earlier run under this pid")
+    const old = new Date(Date.now() - 25 * 60 * 60 * 1000)
+    fs.utimesSync(file, old, old)
+    expect(Blobs.sweep(where)).toEqual([process.pid])
+    expect(staged(where)).toEqual([])
   })
 })

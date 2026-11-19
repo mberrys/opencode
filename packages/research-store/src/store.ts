@@ -16,7 +16,10 @@ export interface Head {
   readonly digest: Canonical.Digest
 }
 
-/** A commit as the store keeps it. `replayed` says the same request had already committed, and nothing was written. */
+/**
+ * A commit as the store keeps it. `replayed` says the revisions had already committed together, and nothing was
+ * written; `revisions` then lists the request's own, which may be some of that commit's in any order.
+ */
 export interface Committed extends Head {
   readonly revisions: readonly Ref.Exact[]
   readonly replayed: boolean
@@ -24,8 +27,9 @@ export interface Committed extends Head {
 
 export interface CommitRequest {
   /**
-   * Optional: names the request, such as the tool call that made it. Any retry of revisions already committed returns
-   * that commit, with or without a key. New revisions under a key already used are refused with
+   * Optional: names the request, such as the tool call that made it. A retry of revisions already committed together
+   * returns that commit, with or without a key, whatever their order and even if it sends only some of them. New
+   * revisions under a key already used are refused with
    * `idempotency-conflict`, whose detail names the commit the key made: a retry that rebuilt its revisions, with new
    * timestamps say, learns that its call already landed.
    */
@@ -70,21 +74,10 @@ export interface Options {
   readonly projectId: string
   /** How long a commit waits for another writer before it is refused with `writer-busy`. */
   readonly busyTimeoutMs?: number
-  /** Kill tests only. */
-  readonly failpoint?: Failpoint.Config
 }
 
 const BUSY_TIMEOUT_MS = 2_000
 const MAX_KEY_LENGTH = 256
-
-interface CommitRow {
-  readonly seq: number
-  readonly prev: string
-  readonly digest: string
-  readonly key: string | null
-  readonly request: string
-  readonly revisions: string
-}
 
 /** Opens the record in `<directory>/.research/` for writing, creating it when it is new. */
 export function open(directory: string, options: Options): Store {
@@ -92,20 +85,19 @@ export function open(directory: string, options: Options): Store {
     throw new StoreError("invalid-argument", "a project id is a non-blank string of at most 256 characters")
   const layout = Layout.of(directory)
   fs.mkdirSync(layout.root, { recursive: true })
-  if (options.failpoint !== undefined) Failpoint.configure(options.failpoint)
   const swept = Blobs.sweep(layout)
   const db = Tables.openWriter(layout.database, options.projectId, options.busyTimeoutMs ?? BUSY_TIMEOUT_MS)
-  const { reader, cache, assertOpen } = read(db, layout, options.projectId)
+  const opened = read(db, layout, options.projectId)
   return {
-    ...reader,
+    ...opened.reader,
     swept,
     admit: (bytes) => {
-      assertOpen()
+      opened.assertOpen()
       return Blobs.admit(layout, bytes)
     },
     commit: (request) => {
-      assertOpen()
-      return commit(db, layout, cache, options.projectId, request)
+      opened.assertOpen()
+      return commit(db, layout, opened.cache, options.projectId, request)
     },
   }
 }
@@ -113,8 +105,8 @@ export function open(directory: string, options: Options): Store {
 /** Opens a record for reading only, as `verify` does: no schema is created, nothing is swept, no write lock is taken. */
 export function openReadOnly(directory: string, options: { readonly busyTimeoutMs?: number } = {}): Reader {
   const layout = Layout.of(directory)
-  const { db, projectId } = Tables.openReader(layout.database, options.busyTimeoutMs ?? BUSY_TIMEOUT_MS)
-  return read(db, layout, projectId).reader
+  const opened = Tables.openReader(layout.database, options.busyTimeoutMs ?? BUSY_TIMEOUT_MS)
+  return read(opened.db, layout, opened.projectId).reader
 }
 
 /** Every revision the record holds, parsed once and kept until another writer moves the head. */
@@ -211,43 +203,55 @@ function commit(
   const digestOfRequest = Chain.request(ids)
   const required = [...new Set(revisions.flatMap(ResearchRecord.blobs))].toSorted() as Canonical.Digest[]
   // Hashing happens before the write lock, so a large file never holds it. Nothing deletes blobs, so inside the
-  // lock it is enough that each is still there.
-  required.forEach((digest) => {
-    const found = Blobs.check(Layout.blobPath(layout, digest), digest)
-    if (found === "missing") throw new StoreError("blob-missing", `the blob ${digest} has not been admitted`)
-    if (found === "corrupt") throw new StoreError("blob-corrupt", `the blob ${digest} does not match its digest`)
-  })
+  // lock it is enough that each is still there. A quoted text is read once, and that read is its check.
+  const quoted = new Set(
+    revisions.flatMap((revision) => (revision.kind === "fragment" ? [revision.body.representationDigest] : [])),
+  )
+  const texts = new Map<string, Uint8Array>(
+    required.filter((digest) => quoted.has(digest)).map((digest) => [digest, Blobs.read(layout, digest)] as const),
+  )
+  const sizes = new Map<string, number>(
+    required
+      .filter((digest) => !quoted.has(digest))
+      .map((digest) => {
+        const found = Blobs.measure(Layout.blobPath(layout, digest), digest)
+        if (found.check === "missing") throw new StoreError("blob-missing", `the blob ${digest} has not been admitted`)
+        if (found.check === "corrupt")
+          throw new StoreError("blob-corrupt", `the blob ${digest} does not match its digest`)
+        return [digest, found.size] as const
+      }),
+  )
   // A copy states its file's size, and verify would fail forever on one that is wrong.
   revisions.forEach((revision) => {
     if (revision.kind !== "copy") return
-    const size = fs.statSync(Layout.blobPath(layout, revision.body.blob)).size
+    const size = sizes.get(revision.body.blob) ?? texts.get(revision.body.blob)?.length
     if (size !== revision.body.size)
       throw new StoreError("size-mismatch", `the copy says ${revision.body.size} bytes; its blob has ${size}`)
   })
   // A quote one byte off its stored text never enters the record. The graph checks, under the lock, that the digest
-  // quoted against is the representation's. Each text is read once, however many quotes are cut from it.
-  const texts = new Map<string, Uint8Array>()
+  // quoted against is the representation's.
   revisions.forEach((revision) => {
     if (revision.kind !== "fragment") return
     const digest = revision.body.representationDigest
-    const bytes = texts.get(digest) ?? Blobs.read(layout, digest)
-    texts.set(digest, bytes)
+    const bytes = texts.get(digest)
+    if (bytes === undefined) return
     Fragment.verify({ representationDigest: digest as Canonical.Digest, selector: revision.body.selector, bytes })
   })
 
   const outcome = Tables.busy(() =>
     db
       .transaction((): { committed: Committed; graph?: Graph.Graph } => {
-        const replay = replayOf(db, key, digestOfRequest, refs)
+        const replay = replayOf(db, key, ids, refs)
         if (replay !== undefined) return { committed: replay }
-        const { graph, head } = refresh(db, projectId, cache)
+        const current = refresh(db, projectId, cache)
+        const head = current.head
         const seq = (head?.seq ?? 0) + 1
         required.forEach((digest) => {
           if (!fs.existsSync(Layout.blobPath(layout, digest)))
             throw new StoreError("blob-missing", `the blob ${digest} disappeared before the commit`)
         })
         const added = revisions.map((revision) => ({ seq, revision }))
-        const next = Graph.make(projectId, [...graph.entries, ...added])
+        const next = Graph.make(projectId, [...current.graph.entries, ...added])
         const insertRevision = db.query(
           "INSERT INTO revisions(revision_id, seq, object_id, kind, json) VALUES (?, ?, ?, ?, ?)",
         )
@@ -281,14 +285,21 @@ function commit(
 }
 
 /**
- * The earlier commit of the same revisions, if there is one: identical revisions can never legitimately commit twice,
- * so a retry always finds its commit by content, whatever key it carries. New revisions under a used key are refused.
+ * The earlier commit that holds all of these revisions, if there is one: identical revisions can never legitimately
+ * commit twice, so a retry finds its commit by the revisions themselves, whatever key it carries, in whatever order
+ * and however many of them it resends. Revisions spread over several commits, or only partly committed, are not a
+ * retry, and the contract refuses them. New revisions under a used key are refused.
  */
-function replayOf(db: Database, key: string | null, request: Canonical.Digest, refs: readonly Ref.Exact[]) {
-  const found = db.query<CommitRow, [string]>("SELECT * FROM commits WHERE request = ?").get(request)
+function replayOf(db: Database, key: string | null, ids: readonly string[], refs: readonly Ref.Exact[]) {
+  const seqOf = db.query<{ seq: number }, [string]>("SELECT seq FROM revisions WHERE revision_id = ?")
+  const seqs = new Set(ids.map((id) => seqOf.get(id)?.seq))
+  const seq = seqs.size === 1 ? [...seqs][0] : undefined
+  const found =
+    seq === undefined ? null : db.query<Tables.CommitRow, [number]>("SELECT * FROM commits WHERE seq = ?").get(seq)
   if (found !== null)
     return { seq: found.seq, digest: found.digest as Canonical.Digest, revisions: refs, replayed: true }
-  const byKey = key === null ? null : db.query<CommitRow, [string]>("SELECT * FROM commits WHERE key = ?").get(key)
+  const byKey =
+    key === null ? null : db.query<Tables.CommitRow, [string]>("SELECT * FROM commits WHERE key = ?").get(key)
   if (byKey !== null)
     throw new StoreError("idempotency-conflict", `the key ${key} already committed other revisions`, {
       seq: byKey.seq,

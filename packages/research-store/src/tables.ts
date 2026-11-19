@@ -2,9 +2,18 @@ export * as Tables from "./tables.js"
 
 import { Database } from "bun:sqlite"
 import fs from "node:fs"
-import { StoreError } from "./error.js"
+import { StoreError, codeOf } from "./error.js"
 
 export const SCHEMA_VERSION = 1
+
+export interface CommitRow {
+  readonly seq: number
+  readonly prev: string
+  readonly digest: string
+  readonly key: string | null
+  readonly request: string
+  readonly revisions: string
+}
 
 /**
  * `commits` is the chain: each row's digest covers its sequence, the previous digest, its idempotency key and the
@@ -135,11 +144,6 @@ function isBusy(error: unknown) {
 function notARecord(error: unknown, file: string) {
   if (codeOf(error).startsWith("SQLITE_NOTADB")) return new StoreError("store-mismatch", `${file} is not a database`)
   return error
-}
-
-function codeOf(error: unknown) {
-  if (typeof error !== "object" || error === null || !("code" in error)) return ""
-  return String(error.code)
 }
 
 function hasMeta(db: Database) {

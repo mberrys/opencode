@@ -28,3 +28,9 @@ export class StoreError extends Error {
 export function messageOf(error: unknown) {
   return error instanceof Error ? error.message : String(error)
 }
+
+/** The `code` of a Node or SQLite error, or "" when it has none. */
+export function codeOf(error: unknown) {
+  if (typeof error !== "object" || error === null || !("code" in error)) return ""
+  return String(error.code)
+}

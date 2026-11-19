@@ -187,6 +187,31 @@ describe("retries", () => {
     })
   })
 
+  test("a retry that reorders or resends only some of a commit's revisions replays that commit", () => {
+    const store = open()
+    const a = claim("claim-1", "Union density fell.")
+    const b = claim("claim-2", "Wage inequality rose.")
+    const landed = store.commit({ key: "call-1", revisions: [a, b] })
+    const head = { seq: landed.seq, digest: landed.digest, replayed: true }
+    expect(store.commit({ key: "call-1", revisions: [b, a] })).toEqual({
+      ...head,
+      revisions: [ResearchRecord.refOf(b), ResearchRecord.refOf(a)],
+    })
+    expect(store.commit({ revisions: [a] })).toEqual({ ...head, revisions: [ResearchRecord.refOf(a)] })
+    expect(store.head()?.seq).toBe(1)
+  })
+
+  test("revisions from two commits, or partly committed, are not a retry", () => {
+    const store = open()
+    const a = claim("claim-1", "Union density fell.")
+    const b = claim("claim-2", "Wage inequality rose.")
+    store.commit({ revisions: [a] })
+    store.commit({ revisions: [b] })
+    expect(refusal(() => store.commit({ revisions: [a, b] })).message).toContain("only once")
+    expect(refusal(() => store.commit({ revisions: [a, claim("claim-3", "New.")] })).message).toContain("only once")
+    expect(store.head()?.seq).toBe(2)
+  })
+
   test("a key that is not well-formed text is refused as an argument", () => {
     const store = open()
     expect(refusal(() => store.commit({ key: "call-\ud800", revisions: [claim("c", "t")] })).code).toBe(

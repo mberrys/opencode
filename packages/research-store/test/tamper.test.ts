@@ -210,6 +210,28 @@ describe("a tampered blob", () => {
     expect(found).toContainEqual({ reason: "request-mismatch", seq: 3 })
   })
 
+  test("a quote rewritten in a record whose history also breaks a rule is still reported", () => {
+    const record = recorded()
+    const { revisionId: _revisionId, ...preimage } = record.fragment
+    const body = record.fragment.body as ResearchRecord.Body<"fragment">
+    const rewritten = ResearchRecord.create({
+      ...preimage,
+      body: { ...body, selector: { ...body.selector, quote: "Union densitY" } },
+    })
+    tamper(record.directory, (db) => {
+      db.query("UPDATE revisions SET revision_id = ?, json = ? WHERE revision_id = ?").run(
+        rewritten.revisionId,
+        Canonical.json(rewritten),
+        record.fragment.revisionId,
+      )
+      db.query("UPDATE commits SET revisions = ? WHERE seq = 3").run(JSON.stringify([rewritten.revisionId]))
+      db.query("UPDATE revisions SET seq = 5 WHERE revision_id = ?").run(record.v1.revisionId)
+    })
+    const found = reasons(verify(record.directory))
+    expect(found).toContainEqual({ reason: "history-invalid", seq: 5 })
+    expect(found).toContainEqual({ reason: "fragment-mismatch", seq: 3 })
+  })
+
   test("a copy whose stated size is not its file's size is reported", () => {
     const record = recorded()
     const resized = ResearchRecord.create({
