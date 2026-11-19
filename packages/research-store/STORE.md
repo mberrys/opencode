@@ -57,9 +57,34 @@ Each blob is read once, so one that changes or vanishes while verify runs is rep
 
 Deleting the newest commits leaves a valid record; only `headDigest` shows it, so it is what an outside reader pins.
 
+## Export
+
+`exportTo(directory)` writes the record, in one read transaction, to a new or empty directory a reader can check with Node alone:
+
+```text
+manifest.json   research-bundle@1: the project, and the head commit's seq and digest
+log.jsonl       one commit per line: seq, prev, digest, key, request, and its revisions in full, in commit order
+blobs/<64 hex>  every file the revisions cite
+verify.mjs      the verifier: node verify.mjs [directory] [--json]
+README.txt
+```
+
+Damage is exported as it is so the reader's verifier reports it; a missing file is left out. The result also carries the store's own `verify` of what it exported.
+
+`verify.mjs` has no dependencies and shares no code with `research-record`; like the Python verifier, it is held to `research-record`'s frozen vectors. It checks the manifest, the chain from genesis (`seq-gap`, `prev-mismatch`, `request-mismatch`, `digest-mismatch`), each revision's id, kind, schema, voice and project (`revision-invalid`), every cited file (`blob-missing`, `blob-corrupt`), each copy's size and each quote (`size-mismatch`, `fragment-mismatch`), and that the log ends at the manifest's head (`head-mismatch`). It does not check the cross-record contract rules; the store's `verify` does.
+
+## Replay
+
+`Replay.run(reader, { run?, rerun? })` walks the receipts in commit order and rechecks each step:
+
+- A tool recorded as `rerun` runs again through `rerun(tool, version, input)`, and its output must have the recorded digest.
+- A tool recorded as `stored`, a model call and a command are answered from their stored files, which must be intact.
+- A script cannot replay yet.
+
+A step that cannot be rechecked is `unverifiable`, never a pass: `ok` needs at least one receipt, no mismatch and nothing unverifiable.
+
 ## Not yet
 
-- Export as JSON lines plus blobs, for a reader with neither OpenCode nor SQLite (layer 3).
 - Garbage collection of unreferenced blobs, and change notices for a UI.
 - How skill files stay reachable: a skill pin digests a file map that no revision names.
 - Scale: each commit rebuilds the graph over the whole record, O(N); `busy_timeout` blocks the caller's thread while it waits. The 1.5 gate measures both.

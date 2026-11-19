@@ -5,7 +5,10 @@
     "types": ["bun"],
     "noUnusedLocals": true,
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
-    "noUncheckedIndexedAccess": false
+    "noUncheckedIndexedAccess": false,
+    // The exported verifier is plain JavaScript; tests import it, but it is not type-checked.
+    "allowJs": true,
+    "checkJs": false
   },
   "include": ["src", "test"]
 }

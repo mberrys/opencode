@@ -4,6 +4,7 @@ import type { Database } from "bun:sqlite"
 import { Canonical, Fragment, Graph, Ref, ResearchRecord } from "@opencode/research-record"
 import fs from "node:fs"
 import { Blobs } from "./blobs.js"
+import { Bundle } from "./bundle.js"
 import { Chain } from "./chain.js"
 import { StoreError, messageOf } from "./error.js"
 import { Failpoint } from "./failpoint.js"
@@ -59,6 +60,8 @@ export interface Reader {
   /** The copy objects whose newest revision holds these bytes, with their sources. */
   copiesOf(digest: Canonical.Digest): readonly Copy[]
   verify(): Verify.Verification
+  /** Writes the record to a new directory as plain files that `node verify.mjs` checks without OpenCode. */
+  exportTo(directory: string): Bundle.Exported
   close(): void
 }
 
@@ -173,6 +176,10 @@ function read(db: Database, layout: Layout.Layout, projectId: string) {
     verify: () => {
       assertOpen()
       return db.transaction(() => Verify.run(db, layout, projectId)).deferred()
+    },
+    exportTo: (directory) => {
+      assertOpen()
+      return db.transaction(() => Bundle.write(db, layout, projectId, directory)).deferred()
     },
     close: () => {
       if (closed) return
