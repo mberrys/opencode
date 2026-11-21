@@ -271,6 +271,8 @@ describe("delivery plugin", () => {
       expect(plugin.delivery()?.deadline).toBe(Delivery.MAX_BUDGET)
       expect(plugin.changed).toHaveLength(2)
       expect(plugin.sent).toEqual([])
+      expect(failureType(yield* Effect.exit(plugin.extend(minute)))).toMatchObject({ type: "inactive" })
+      expect(plugin.changed).toHaveLength(2)
     }),
   )
 
@@ -553,14 +555,14 @@ describe("delivery idle hook", () => {
     Effect.gen(function* () {
       let plugin: Effect.Success<ReturnType<typeof run>> | undefined
       plugin = yield* run(active, {
-        sending: () => plugin?.emit(enqueued("msg_faster", "user", "Faster", 0)) ?? Effect.void,
+        sending: () => plugin?.emit(enqueued("msg_faster", "user", "Faster", 1)) ?? Effect.void,
       })
 
       yield* plugin.stop()
 
       expect(plugin.delivery()).toMatchObject({
         wrapUpSent: true,
-        feedback: [{ id: "msg_faster", text: "Faster", at: 0 }],
+        feedback: [{ id: "msg_faster", text: "Faster", at: 1 }],
       })
     }),
   )
@@ -600,6 +602,16 @@ describe("delivery feedback", () => {
       const plugin = yield* run({ ...active, status: "done" })
 
       yield* plugin.emit(enqueued("msg_blue", "user", "Make it blue", minute))
+
+      expect(plugin.delivery()?.feedback).toBeUndefined()
+    }),
+  )
+
+  it.effect("leaves the kickoff that started the delivery out of its feedback", () =>
+    Effect.gen(function* () {
+      const plugin = yield* run(active)
+
+      yield* plugin.emit(enqueued("msg_kickoff", "user", "Build a pendulum experiment", active.startedAt))
 
       expect(plugin.delivery()?.feedback).toBeUndefined()
     }),
@@ -649,7 +661,7 @@ describe("delivery tools", () => {
 
       yield* Effect.all(
         [
-          plugin.emit(enqueued("msg_blue", "user", "Make it blue", 0)),
+          plugin.emit(enqueued("msg_blue", "user", "Make it blue", 1)),
           plugin.tool("plan", {
             title: milestone.title,
             scope: milestone.scope,
@@ -664,7 +676,7 @@ describe("delivery tools", () => {
 
       expect(plugin.delivery()).toMatchObject({
         next: milestone,
-        feedback: [{ id: "msg_blue", text: "Make it blue", at: 0 }],
+        feedback: [{ id: "msg_blue", text: "Make it blue", at: 1 }],
       })
     }),
   )

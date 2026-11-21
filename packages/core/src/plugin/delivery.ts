@@ -85,12 +85,15 @@ export const Plugin = define({
                 if (!delivery || (delivery.status !== "active" && !resumable(delivery)))
                   return yield* Effect.fail(call.error("inactive", "No delivery whose budget can be extended.", {}))
                 const now = yield* Clock.currentTimeMillis
+                // An expired budget is extended from now, so the extension is time the agent actually gets.
                 const deadline = Math.min(
                   Math.max(delivery.deadline, now) + input.by,
                   delivery.startedAt + Delivery.MAX_BUDGET,
                 )
-                if (deadline <= now)
-                  return yield* Effect.fail(call.error("inactive", "The delivery has used the longest budget.", {}))
+                if (deadline <= Math.max(delivery.deadline, now))
+                  return yield* Effect.fail(
+                    call.error("inactive", "The delivery is already at the longest budget and cannot be extended.", {}),
+                  )
                 // This process's own active delivery only gets more time. Any other resumes under this process, and
                 // its Session is woken, since nothing has driven it since it stopped or its process ended.
                 if (delivery.status === "active" && delivery.boot === boot()) {
@@ -324,11 +327,13 @@ export const Plugin = define({
     )
 
     // The user's messages while the delivery runs are its feedback. They are kept as they arrive, so a compaction that
-    // drops them from the context does not drop them from the delivery. The inbox ID becomes the message's ID.
+    // drops them from the context does not drop them from the delivery. The inbox ID becomes the message's ID. The
+    // kickoff that started the delivery, sent at `startedAt`, is not feedback.
     const record = Effect.fn("DeliveryPlugin.record")(
       function* (sessionID: Session.ID, feedback: Delivery.Feedback) {
         const delivery = yield* read(sessionID)
         if (delivery?.status !== "active" && delivery?.status !== "stopping") return
+        if (feedback.at <= delivery.startedAt) return
         if (delivery.feedback?.some((item) => item.id === feedback.id)) return
         yield* write(sessionID, {
           ...delivery,
