@@ -49,9 +49,14 @@ const toolContext: Tool.Context = {
 
 /**
  * Runs the delivery plugin against plugin storage in memory, an RPC stub that records what it publishes, a tool editor
- * that keeps the tools it adds, and a Session context of the given messages.
+ * that keeps the tools it adds, and a Session context of the given messages. `whileReading` runs each time the context
+ * is read, with a setter for the stored delivery, so a test can land a write while a tool is mid-call.
  */
-const run = Effect.fnUntraced(function* (seed?: Delivery.State, messages: ReadonlyArray<SessionMessage.Info> = []) {
+const run = Effect.fnUntraced(function* (
+  seed?: Delivery.State,
+  messages: ReadonlyArray<SessionMessage.Info> = [],
+  whileReading?: (store: (state: Delivery.State) => void) => void,
+) {
   const stored = new Map<string, Schema.Json>(seed ? [[`session:${sessionID}`, seed]] : [])
   const changed: unknown[] = []
   const handlers: Partial<RpcHandlers<typeof Delivery.Definition>> = {}
@@ -59,7 +64,13 @@ const run = Effect.fnUntraced(function* (seed?: Delivery.State, messages: Readon
   const events = yield* Queue.unbounded<SessionEvent.Deleted>()
   yield* DeliveryPlugin.Plugin.effect(
     host({
-      session: { context: () => Effect.succeed(messages) as never },
+      session: {
+        context: () =>
+          Effect.sync(() => {
+            whileReading?.((state) => void stored.set(`session:${sessionID}`, state))
+            return messages
+          }) as never,
+      },
       tool: {
         // SAFETY: the plugin only declares its namespace and adds tools.
         transform: (callback) =>
@@ -171,6 +182,17 @@ describe("delivery plugin", () => {
       expect((yield* plugin.extend(Delivery.MAX_BUDGET)).deadline).toBe(Delivery.MAX_BUDGET)
       expect(plugin.delivery()?.deadline).toBe(Delivery.MAX_BUDGET)
       expect(plugin.changed).toHaveLength(2)
+      expect(failureType(yield* Effect.exit(plugin.extend(minute)))).toMatchObject({ type: "inactive" })
+      expect(plugin.changed).toHaveLength(2)
+    }),
+  )
+
+  it.effect("extends an expired budget from now, so the extension is time the agent gets", () =>
+    Effect.gen(function* () {
+      const plugin = yield* run(active)
+      yield* TestClock.adjust(20 * minute)
+
+      expect((yield* plugin.extend(5 * minute)).deadline).toBe(25 * minute)
     }),
   )
 
@@ -180,9 +202,11 @@ describe("delivery plugin", () => {
 
       yield* plugin.delete(Session.ID.make("ses_other"))
       expect(plugin.delivery()).toEqual(active)
+      expect(plugin.changed).toEqual([])
 
       yield* plugin.delete(sessionID)
       expect(plugin.delivery()).toBeUndefined()
+      expect(plugin.changed).toEqual([{ sessionID, delivery: null }])
     }),
   )
 })
@@ -281,7 +305,7 @@ describe("delivery tools", () => {
     }),
   )
 
-  it.effect("record the feedback a version answers, and refuse feedback IDs that are not the user's messages", () =>
+  it.effect("record the feedback a version answers, and refuse messages from before the delivery started", () =>
     Effect.gen(function* () {
       const plugin = yield* run({ ...planned, startedAt: minute }, [
         user("msg_before", "Hello", 0),
@@ -292,10 +316,37 @@ describe("delivery tools", () => {
         message(
           yield* Effect.exit(plugin.tool("publish", { summary: "v1", checks: passing, feedback: ["msg_before"] })),
         ),
-      ).toBe("Not published. No feedback message has the ID msg_before; delivery_status lists them.")
+      ).toBe(
+        "Not published. msg_before came before the delivery started, so it is not feedback; delivery_status lists the feedback.",
+      )
 
-      yield* plugin.tool("publish", { summary: "Blue pendulum", checks: passing, feedback: ["msg_blue"] })
-      expect(plugin.delivery()?.versions[0]?.feedback).toEqual(["msg_blue"])
+      // msg_compacted was listed by delivery_status, then a compaction dropped it from the context.
+      yield* plugin.tool("publish", {
+        summary: "Blue pendulum",
+        checks: passing,
+        feedback: ["msg_blue", "msg_compacted"],
+      })
+      expect(plugin.delivery()?.versions[0]?.feedback).toEqual(["msg_blue", "msg_compacted"])
+    }),
+  )
+
+  it.effect("refuse to publish against a plan that changed while the feedback was read", () =>
+    Effect.gen(function* () {
+      const replanned = { ...planned, next: { ...milestone, title: "Double pendulum" } }
+      const plugin = yield* run(planned, [user("msg_blue", "Make it blue", minute)], (store) => store(replanned))
+
+      expect(
+        message(yield* Effect.exit(plugin.tool("publish", { summary: "v1", checks: passing, feedback: ["msg_blue"] }))),
+      ).toBe("Not published. The plan changed while publishing; check against the new plan and publish again.")
+      expect(plugin.delivery()).toEqual(replanned)
+    }),
+  )
+
+  it.effect("leave the kickoff that started the delivery out of its feedback", () =>
+    Effect.gen(function* () {
+      const plugin = yield* run(active, [user("msg_kickoff", "Build a pendulum experiment", 0)])
+
+      expect((yield* plugin.tool("status", {})).output).toMatchObject({ feedback: [] })
     }),
   )
 

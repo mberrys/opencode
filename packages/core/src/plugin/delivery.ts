@@ -53,11 +53,17 @@ export const Plugin = define({
             const delivery = yield* read(input.sessionID)
             if (delivery?.status !== "active")
               return yield* Effect.fail(call.error("inactive", "No active delivery to extend.", {}))
-            const next: State = {
-              ...delivery,
-              deadline: Math.min(delivery.deadline + input.by, delivery.startedAt + Delivery.MAX_BUDGET),
-              updatedAt: yield* Clock.currentTimeMillis,
-            }
+            const now = yield* Clock.currentTimeMillis
+            // An expired budget is extended from now, so the extension is time the agent actually gets.
+            const deadline = Math.min(
+              Math.max(delivery.deadline, now) + input.by,
+              delivery.startedAt + Delivery.MAX_BUDGET,
+            )
+            if (deadline <= Math.max(delivery.deadline, now))
+              return yield* Effect.fail(
+                call.error("inactive", "The delivery is already at the longest budget and cannot be extended.", {}),
+              )
+            const next: State = { ...delivery, deadline, updatedAt: now }
             yield* write(input.sessionID, next)
             return next
           }),
@@ -82,7 +88,10 @@ export const Plugin = define({
 
     yield* ctx.event.subscribe({ types: ["session.deleted"] }).pipe(
       Stream.runForEach((event) =>
-        ctx.storage.remove(PREFIX + event.data.sessionID).pipe(
+        Effect.gen(function* () {
+          if ((yield* ctx.storage.get(PREFIX + event.data.sessionID)) === undefined) return
+          yield* write(event.data.sessionID, undefined)
+        }).pipe(
           Effect.catchCause((cause) =>
             Effect.logWarning("failed to drop a deleted Session's delivery", {
               sessionID: event.data.sessionID,
@@ -103,13 +112,14 @@ export const Plugin = define({
         ),
       )
 
-    // The user's messages since the delivery started are its feedback. Compaction drops older ones from the context.
+    // The user's messages after the delivery started are its feedback; the kickoff that started it, sent at `startedAt`,
+    // is not. Compaction drops older ones from the context.
     const userMessages = Effect.fn("DeliveryPlugin.userMessages")(function* (sessionID: Session.ID, delivery: State) {
       const messages = yield* ctx.session
         .context({ sessionID })
         .pipe(Effect.mapError((error) => new Tool.Error({ message: "Unable to read the session's feedback", error })))
       return messages.flatMap((message) =>
-        message.type === "user" && DateTime.toEpochMillis(message.time.created) >= delivery.startedAt
+        message.type === "user" && DateTime.toEpochMillis(message.time.created) > delivery.startedAt
           ? [{ id: String(message.id), text: message.text }]
           : [],
       )
@@ -206,17 +216,36 @@ export const Plugin = define({
                 )
               const answered = input.feedback ?? []
               if (answered.length > 0) {
-                const known = new Set((yield* userMessages(tool.sessionID, delivery)).map((message) => message.id))
-                const unknown = answered.filter((id) => !known.has(id))
-                if (unknown.length > 0)
+                // A message still in the context but sent before the delivery started is not feedback. An ID that is not
+                // in the context may be feedback a compaction dropped after delivery_status listed it, so it is kept.
+                const context = yield* ctx.session
+                  .context({ sessionID: tool.sessionID })
+                  .pipe(
+                    Effect.mapError(
+                      (error) => new Tool.Error({ message: "Unable to read the session's feedback", error }),
+                    ),
+                  )
+                const feedback = new Set((yield* userMessages(tool.sessionID, delivery)).map((message) => message.id))
+                const earlier = answered.filter(
+                  (id) => !feedback.has(id) && context.some((message) => String(message.id) === id),
+                )
+                if (earlier.length > 0)
                   return yield* Effect.fail(
                     failure(
-                      `Not published. No feedback message has the ID ${unknown.join(", ")}; delivery_status lists them.`,
+                      `Not published. ${earlier.join(", ")} came before the delivery started, so it is not feedback; delivery_status lists the feedback.`,
                     ),
                   )
               }
-              // Re-read so a stop or extension that landed while the feedback was read is kept.
+              // Re-read so a stop or extension that landed while the feedback was read is kept. A plan or finish that
+              // landed meanwhile wins: this version was checked against the old plan.
               const latest = yield* current(tool.sessionID)
+              if (latest.status === "done") return yield* Effect.fail(failure("The delivery is done."))
+              if (latest.next?.title !== milestone.title || latest.next.dueAt !== milestone.dueAt)
+                return yield* Effect.fail(
+                  failure(
+                    "Not published. The plan changed while publishing; check against the new plan and publish again.",
+                  ),
+                )
               const now = yield* Clock.currentTimeMillis
               const { next: _published, ...rest } = latest
               const published: State = {
