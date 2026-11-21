@@ -16680,6 +16680,9 @@
               "research": {
                 "type": "boolean"
               },
+              "live_delivery": {
+                "type": "boolean"
+              },
               "part_rows": {
                 "type": "boolean"
               },

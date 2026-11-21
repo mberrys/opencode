@@ -20,5 +20,7 @@ export const registry = {
   mcp_events:
     "Enable experimental MCP Events, a draft MCP extension: declare support to MCP servers and read the events of servers that offer them.",
   research: "Enable the research harness, a built-in plugin for answers cited to their sources.",
+  live_delivery:
+    "Enable experimental live delivery: the agent ships a working first version, then publishes checked versions until a time budget runs out, taking feedback as it goes.",
 } as const satisfies Record<string, string>
 export type Key = keyof typeof registry
