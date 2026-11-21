@@ -39,6 +39,10 @@ jobs:
       - name: Typecheck (TypeScript 7.1)
         run: bun run typecheck:tsc
 
+      # Core's search tools find `rg` on PATH and otherwise download it, which tests refuse; the Blacksmith images have it.
+      - name: Install ripgrep
+        run: sudo apt-get install -y --no-install-recommends ripgrep
+
       # research-record's tests also run its Python port, which calls `python`.
       - name: Provide python
         run: command -v python || sudo ln -s "$(command -v python3)" /usr/local/bin/python
