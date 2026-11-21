@@ -168,6 +168,29 @@ describe("adding an own file", () => {
     expect(Workspace.entries(lib.store.graph())).toHaveLength(1)
   })
 
+  test("a title proposed with bytes already held is recorded against the existing source", async () => {
+    const lib = library()
+    const first = await Add.add(lib.store, { file: file(lib.directory, "paper.md", PAPER) }, agent())
+    const again = await Add.add(
+      lib.store,
+      { file: file(lib.directory, "copy.md", PAPER), title: "Union decline and inequality" },
+      agent(),
+    )
+    expect(again.status).toBe("existing")
+    const graph = lib.store.graph()
+    expect(Tier.citation(graph, first.source, graph.lastSeq).title).toEqual({
+      value: "Union decline and inequality",
+      from: "agent",
+    })
+  })
+
+  test("a file over the size limit is refused before it is read", async () => {
+    const lib = library()
+    const big = file(lib.directory, "big.txt", "x".repeat(4096))
+    expect(Add.add(lib.store, { file: big }, agent({ maxBytes: 1024 }))).rejects.toThrow("the limit is 1024")
+    expect(lib.store.head()).toBeUndefined()
+  })
+
   test("a PDF is stored, and the missing extraction is said rather than silent", async () => {
     const lib = library()
     const added = await Add.add(lib.store, { file: file(lib.directory, "paper.pdf", "%PDF-1.7 bytes") }, agent())
