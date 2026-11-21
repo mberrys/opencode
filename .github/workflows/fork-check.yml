@@ -1,0 +1,68 @@
+name: fork-check
+
+# The upstream check and test workflows run on Blacksmith runners, which this fork does not have, and `check` only runs
+# for pull requests into dev and beta. This runs the same lint and typecheck on GitHub-hosted runners for pull requests
+# into the fork's `work` branch, plus the tests of every package the pull request changes.
+on:
+  pull_request:
+    branches: [work]
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+concurrency:
+  group: fork-check-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: lint, typecheck and changed-package tests
+    if: ${{ github.repository == 'mberrys/opencode' && !github.event.pull_request.draft }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          # A pull request checks out its merge into the current base; the first parent is that base.
+          fetch-depth: 2
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Lint
+        run: bun run lint
+
+      # CI keeps the official TypeScript compiler as the source of truth, as `check` does.
+      - name: Typecheck (TypeScript 7.1)
+        run: bun run typecheck:tsc
+
+      # research-record's tests also run its Python port, which calls `python`.
+      - name: Provide python
+        run: command -v python || sudo ln -s "$(command -v python3)" /usr/local/bin/python
+
+      # Core's search tests run ripgrep. Without `rg` on the PATH, core downloads it, which the test harness forbids.
+      - name: Provide ripgrep
+        run: command -v rg || (sudo apt-get update && sudo apt-get install -y ripgrep)
+
+      # Tests cannot run from the repository root, so each changed package runs its own `test` script. A changed file
+      # belongs to the nearest directory above it with a package.json, so nested workspaces such as packages/plugins/*
+      # are found too. A manual run has no pull request to compare against and tests nothing.
+      - name: Test changed packages
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          packages=$(git diff --name-only HEAD^1 HEAD | while read -r file; do
+            directory=$(dirname "$file")
+            while [ "$directory" != "." ] && [ ! -f "$directory/package.json" ]; do directory=$(dirname "$directory"); done
+            if [ "$directory" != "." ]; then echo "$directory"; fi
+          done | sort -u)
+          for package in $packages; do
+            if [ -f "$package/package.json" ] && jq -e '.scripts.test' "$package/package.json" > /dev/null; then
+              echo "::group::$package"
+              (cd "$package" && bun run test)
+              echo "::endgroup::"
+            fi
+          done

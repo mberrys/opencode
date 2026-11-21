@@ -119,6 +119,7 @@
         "@opencode/client": "workspace:*",
         "@opencode/plugin": "workspace:*",
         "@opencode/pty": "0.5.2",
+        "@opencode/research-store": "workspace:*",
         "@opencode/schema": "workspace:*",
         "@opencode/server": "workspace:*",
         "@opencode/tui": "workspace:*",
@@ -150,6 +151,7 @@
         "@lydell/node-pty-win32-arm64": "1.2.0-beta.12",
         "@lydell/node-pty-win32-x64": "1.2.0-beta.12",
         "@opencode/protocol": "workspace:*",
+        "@opencode/research-record": "workspace:*",
         "@opencode/script": "workspace:*",
         "@parcel/watcher-darwin-arm64": "2.5.1",
         "@parcel/watcher-linux-arm64-glibc": "2.5.1",
@@ -612,6 +614,25 @@
       "version": "2.3.0",
       "dependencies": {
         "@opencode/plugin": "workspace:*",
+        "@opencode/research-library": "workspace:*",
+        "@opencode/research-record": "workspace:*",
+        "@opencode/research-store": "workspace:*",
+        "@opencode/schema": "workspace:*",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@tsconfig/bun": "catalog:",
+        "@types/bun": "catalog:",
+        "@typescript/native": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
+    "packages/research-library": {
+      "name": "@opencode/research-library",
+      "version": "2.3.0",
+      "dependencies": {
+        "@opencode/research-record": "workspace:*",
+        "@opencode/research-store": "workspace:*",
         "effect": "catalog:",
       },
       "devDependencies": {
@@ -626,6 +647,19 @@
       "version": "2.3.0",
       "dependencies": {
         "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@tsconfig/bun": "catalog:",
+        "@types/bun": "catalog:",
+        "@typescript/native": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
+    "packages/research-store": {
+      "name": "@opencode/research-store",
+      "version": "2.3.0",
+      "dependencies": {
+        "@opencode/research-record": "workspace:*",
       },
       "devDependencies": {
         "@tsconfig/bun": "catalog:",
@@ -1881,7 +1915,11 @@
 
     "@opencode/research": ["@opencode/research@workspace:packages/research"],
 
+    "@opencode/research-library": ["@opencode/research-library@workspace:packages/research-library"],
+
     "@opencode/research-record": ["@opencode/research-record@workspace:packages/research-record"],
+
+    "@opencode/research-store": ["@opencode/research-store@workspace:packages/research-store"],
 
     "@opencode/schema": ["@opencode/schema@workspace:packages/schema"],
 

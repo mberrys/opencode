@@ -27,6 +27,11 @@ export const Server = GlobalFlag.Setting("server")({
 
 const ServerFlags = [Standalone, Server] as const
 
+const ResearchDirectory = Flag.String("directory").pipe(
+  Flag.withDescription("The project whose .research record to read; defaults to the current directory"),
+  Flag.optional,
+)
+
 declare const OPENCODE_CLI_NAME: string | undefined
 
 const ServerParams = {
@@ -122,6 +127,46 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
         ),
         param: Flag.KeyValuePair("param").pipe(Flag.withDescription("OpenAPI path or query parameter"), Flag.optional),
       },
+    }),
+    Spec.make("research", {
+      description: "Check, export and replay a research record, or research a question",
+      commands: [
+        Spec.make("verify", {
+          description: "Check the record: the chain, every revision, stored file and quote, and every contract rule",
+          params: { directory: ResearchDirectory },
+        }),
+        Spec.make("export", {
+          description: "Write the record to a new directory that node verify.mjs checks without OpenCode",
+          params: {
+            directory: ResearchDirectory,
+            out: Argument.String("out").pipe(Argument.withDescription("A new or empty directory to write into")),
+          },
+        }),
+        Spec.make("replay", {
+          description: "Recheck every receipt without a model: stored steps from their files, reruns by digest",
+          params: {
+            directory: ResearchDirectory,
+            run: Flag.String("run").pipe(Flag.withDescription("Replay only this run"), Flag.optional),
+          },
+        }),
+        Spec.make("show", {
+          description: "Print the newest revision of an object, by its id",
+          params: {
+            directory: ResearchDirectory,
+            id: Argument.String("id").pipe(Argument.withDescription("An object id, such as claim-0123456789abcdef")),
+          },
+        }),
+        Spec.make("run", {
+          description: "Research a question with the research agent (needs the research flag on the server)",
+          globalFlags: ServerFlags,
+          params: {
+            question: Argument.String("question").pipe(
+              Argument.withDescription("The research question"),
+              Argument.variadic({ min: 1 }),
+            ),
+          },
+        }),
+      ],
     }),
     Spec.make("debug", {
       description: "Debugging and troubleshooting tools",

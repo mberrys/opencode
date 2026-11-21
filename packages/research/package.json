@@ -10,11 +10,16 @@
     ".": "./src/index.ts"
   },
   "scripts": {
+    "test": "bun test --only-failures",
     "typecheck": "bun check --no-script",
     "typecheck:tsc": "tsc --noEmit"
   },
   "dependencies": {
     "@opencode/plugin": "workspace:*",
+    "@opencode/research-library": "workspace:*",
+    "@opencode/research-record": "workspace:*",
+    "@opencode/research-store": "workspace:*",
+    "@opencode/schema": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {
