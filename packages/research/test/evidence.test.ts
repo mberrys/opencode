@@ -9,6 +9,7 @@ import path from "node:path"
 import { Agents } from "../src/agents.js"
 import { Evidence } from "../src/evidence.js"
 import { Tools } from "../src/tools.js"
+import { PAPER as PDF_PAPER } from "../../research-library/test/fixture/pdf.js"
 
 // Every admission and commit flushes to disk, which is slow on Windows.
 setDefaultTimeout(30_000)
@@ -74,6 +75,32 @@ describe("quoting and claiming", () => {
       "Union decline explains about a fifth of the rise in wage inequality. The rest comes from changes in the returns to education.",
     )
     expect(lib.store.verify().ok).toBe(true)
+  })
+
+  test("a quote from a PDF records the page it starts on and its lines' boxes, and the record still verifies", async () => {
+    const lib = await project()
+    const file = path.join(lib.directory, "paper.pdf")
+    fs.writeFileSync(file, PDF_PAPER)
+    const added = await Add.add(lib.store, { file }, { ...call(), allow: () => false })
+    const short = Find.outline(lib.store, added.source).short
+    const quoted = Evidence.quote(lib.store, call(), { address: `${short}:2/p1/s1`, sentences: 2 })
+    expect(quoted).toMatchObject({
+      quote:
+        "Union decline explains about a fifth of the rise in wage inequality. The rest comes from changes in the returns to education.",
+      page: 1,
+    })
+    const graph = lib.store.graph()
+    const fragment = graph.heads(graph.lastSeq).find((entry) => entry.revision.objectId === quoted.fragment)!.revision
+    if (fragment.kind !== "fragment" || fragment.body.page === "none") throw new Error("the fragment has no page")
+    expect(fragment.body.page.number).toBe(1)
+    // Three printed lines hold the two sentences, top to bottom.
+    expect(fragment.body.page.boxes.map((box) => box[1])).toEqual([620, 606, 592])
+    expect(lib.store.verify().ok).toBe(true)
+
+    const exported = path.join(lib.directory, "export")
+    lib.store.exportTo(exported)
+    const run = Bun.spawnSync(["node", "verify.mjs", "--json"], { cwd: exported })
+    expect(run.exitCode).toBe(0)
   })
 
   test("an address past the end of its paragraph is refused, not quoted from its first sentence", async () => {

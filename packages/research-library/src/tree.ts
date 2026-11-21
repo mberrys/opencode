@@ -33,6 +33,16 @@ export const Node = Schema.Struct({
 })
 export interface Node extends Schema.Schema.Type<typeof Node> {}
 
+/** A run of the text and the box it was printed in: PDF user space, points, origin at the page's bottom left. */
+export const Placed = Schema.Struct({
+  /** UTF-8 byte offsets into the representation's text. */
+  start: Count,
+  end: Count,
+  page: Ordinal,
+  box: Schema.Tuple([Schema.Number, Schema.Number, Schema.Number, Schema.Number]),
+})
+export interface Placed extends Schema.Schema.Type<typeof Placed> {}
+
 export const Structure = Schema.Struct({
   nodes: Schema.Array(Node),
   sections: Count,
@@ -40,6 +50,11 @@ export const Structure = Schema.Struct({
   sentences: Count,
   /** The text's length in UTF-8 bytes. */
   bytes: Count,
+  /**
+   * Where each run of text was printed, in text order, for a text extracted from a paged format. Absent for HTML,
+   * Markdown and plain text, so trees written before PDFs were read still decode unchanged.
+   */
+  layout: Schema.optionalKey(Schema.Array(Placed)),
 })
 export interface Structure extends Schema.Schema.Type<typeof Structure> {}
 
@@ -73,6 +88,7 @@ export function build(blocks: readonly Block[]): Extracted {
   // Byte length of `text` so far, kept as a running total so each block is encoded once.
   let bytes = 0
   let inReferences = false
+  const layout: Placed[] = []
 
   for (const block of blocks) {
     if (text.length > 0) {
@@ -83,6 +99,13 @@ export function build(blocks: readonly Block[]): Extracted {
     text += block.text
     bytes += encoder.encode(block.text).length
     const end = bytes
+    for (const placed of block.layout ?? [])
+      layout.push({
+        start: start + encoder.encode(block.text.slice(0, placed.start)).length,
+        end: start + encoder.encode(block.text.slice(0, placed.end)).length,
+        page: placed.page,
+        box: [...placed.box],
+      })
 
     if (block.kind === "heading") {
       section += 1
@@ -146,7 +169,31 @@ export function build(blocks: readonly Block[]): Extracted {
       paragraphs,
       sentences,
       bytes,
+      ...(layout.length > 0 ? { layout } : {}),
     },
+  }
+}
+
+/** The page a span of the text starts on, or undefined for a text without pages. */
+export function pageAt(tree: Structure, start: number): number | undefined {
+  return tree.layout?.find((placed) => placed.end > start)?.page
+}
+
+/**
+ * Where a span was printed: the page it starts on, and the boxes of the lines on that page that hold any of it.
+ *
+ * GUESS: boxes are whole lines, so the first and last box can hold words outside the quote; a quote that runs onto a
+ * later page records only its first page, since a fragment names one page.
+ */
+export function placement(tree: Structure, start: number, end: number) {
+  const touching = (tree.layout ?? []).filter((placed) => placed.start < end && placed.end > start)
+  const first = touching[0]
+  if (first === undefined) return "none" as const
+  return {
+    number: first.page,
+    boxes: touching
+      .filter((placed) => placed.page === first.page)
+      .map((placed) => [...placed.box] as [number, number, number, number]),
   }
 }
 

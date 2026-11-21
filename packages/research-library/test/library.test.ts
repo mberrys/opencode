@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test"
+import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, spyOn, test } from "bun:test"
 import { Canonical, Fragment, Ref, ResearchRecord, Tier } from "@opencode/research-record"
 import { Store } from "@opencode/research-store"
 import fs from "node:fs"
@@ -7,7 +7,9 @@ import path from "node:path"
 import { Add } from "../src/add.js"
 import { Fetch } from "../src/fetch.js"
 import { Find } from "../src/find.js"
+import { Pdf } from "../src/pdf.js"
 import { Workspace } from "../src/workspace.js"
+import { PAPER as PDF_PAPER } from "./fixture/pdf.js"
 
 // Every admission and commit flushes to disk, which is slow on Windows.
 setDefaultTimeout(30_000)
@@ -191,7 +193,53 @@ describe("adding an own file", () => {
     expect(lib.store.head()).toBeUndefined()
   })
 
-  test("a PDF is stored, and the missing extraction is said rather than silent", async () => {
+  test("a PDF's text is extracted, and read, grep and search say which page each passage is on", async () => {
+    const lib = library()
+    const added = await Add.add(lib.store, { file: file(lib.directory, "paper.pdf", PDF_PAPER) }, agent())
+    expect(added.status).toBe("added")
+    expect(added.notes).toEqual(["6 running header, footer and page-number lines were left out"])
+    const representation = lib.store.graph().get(added.representation!, "representation")
+    expect(representation.body.extractor).toEqual({ id: Pdf.ID, version: Pdf.VERSION })
+    expect(representation.body.ocr).toBe(false)
+
+    const outline = Find.outline(lib.store, added.source)
+    expect(outline.sections.map((section) => section.heading)).toEqual([
+      "Union decline and wage inequality",
+      "1 Introduction",
+      "References",
+      "Appendix A",
+    ])
+    const read = Find.read(lib.store, { address: `${outline.short}:2/p2/s2` })
+    expect(read.sentences[0]).toMatchObject({ text: "They point to trade instead, and to technology.", page: 1 })
+    const grep = Find.grep(lib.store, { pattern: "returns to education" })
+    expect(grep.hits.map((hit) => [hit.address, hit.page])).toEqual([[`${outline.short}:2/p1/s2`, 1]])
+    const search = Find.search(lib.store, { query: "appendix" })
+    expect(search.hits[0]).toMatchObject({ text: "Appendix text.", page: 3 })
+    expect(Find.cites(lib.store, added.source).entries).toHaveLength(2)
+    expect(lib.store.verify().ok).toBe(true)
+  })
+
+  test("a PDF stored before its text could be read gets its text when it is added again", async () => {
+    const lib = library()
+    const at = file(lib.directory, "paper.pdf", PDF_PAPER)
+    const failing = spyOn(Pdf, "blocks").mockRejectedValueOnce(new Error("pdf.js was not there yet"))
+    const first = await Add.add(lib.store, { file: at }, agent())
+    failing.mockRestore()
+    expect(first.status).toBe("no-text")
+    expect(first.notes[0]).toBe("the PDF could not be read: pdf.js was not there yet")
+
+    const again = await Add.add(lib.store, { file: at }, agent())
+    expect(again).toMatchObject({ status: "existing", source: first.source, copy: first.copy })
+    expect(again.representation).toBeDefined()
+    expect(again.notes).toContain("their text had not been extracted, and now is")
+    expect(Find.outline(lib.store, first.source).sections).toHaveLength(4)
+    // A third add finds the text already there and writes nothing but its receipt.
+    const third = await Add.add(lib.store, { file: at }, agent())
+    expect(third.representation).toBeUndefined()
+    expect(lib.store.verify().ok).toBe(true)
+  })
+
+  test("a PDF that cannot be read is stored, and the missing extraction is said rather than silent", async () => {
     const lib = library()
     const added = await Add.add(lib.store, { file: file(lib.directory, "paper.pdf", "%PDF-1.7 bytes") }, agent())
     expect(added.status).toBe("no-text")

@@ -2,7 +2,7 @@ export * as Find from "./find.js"
 
 import { Graph, Ref, ResearchRecord } from "@opencode/research-record"
 import type { Store } from "@opencode/research-store"
-import type { Tree } from "./tree.js"
+import { Tree } from "./tree.js"
 import { Workspace } from "./workspace.js"
 
 export interface Sentence {
@@ -11,6 +11,8 @@ export interface Sentence {
   /** UTF-8 byte offsets into the representation's text: what a fragment's selector names. */
   readonly start: number
   readonly end: number
+  /** The printed page the sentence starts on, for a text extracted from a PDF. */
+  readonly page?: number
 }
 
 export interface Section {
@@ -143,6 +145,7 @@ export interface Ranked {
   readonly short: string
   readonly title: string
   readonly score: number
+  readonly page?: number
 }
 
 export interface Search {
@@ -185,6 +188,7 @@ export function search(
         short: entry.short,
         title: entry.title,
         score: Number(score.toFixed(6)),
+        ...pageOf(paragraph.located, paragraph.node),
       },
     ]
   })
@@ -236,7 +240,18 @@ function textOf(reader: Store.Reader, graph: Graph.Graph, entry: Workspace.Entry
 }
 
 function view(located: Workspace.Located, node: Tree.Node): Sentence {
-  return { address: Workspace.addressOf(located.entry, node), text: node.text, start: node.start, end: node.end }
+  return {
+    address: Workspace.addressOf(located.entry, node),
+    text: node.text,
+    start: node.start,
+    end: node.end,
+    ...pageOf(located, node),
+  }
+}
+
+function pageOf(located: Workspace.Located, node: Tree.Node) {
+  const page = Tree.pageAt(located.tree, node.start)
+  return page === undefined ? {} : { page }
 }
 
 function abstractNote(located: Workspace.Located) {

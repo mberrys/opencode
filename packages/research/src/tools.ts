@@ -17,8 +17,8 @@ const failure = (error: unknown) =>
     : new Tool.Error({ message: error instanceof Error ? error.message : String(error) })
 
 /** Every passage is fenced and addressed, so text from a source reads as data and is cited by its address. */
-const passage = (item: { readonly address: string; readonly text: string }) =>
-  `<passage address="${item.address}">\n${item.text}\n</passage>`
+const passage = (item: { readonly address: string; readonly text: string; readonly page?: number }) =>
+  `<passage address="${item.address}"${item.page === undefined ? "" : ` page="${item.page}"`}>\n${item.text}\n</passage>`
 
 export function install(ctx: Pick<Context, "tool" | "permission" | "session" | "location">, store: () => Store.Store) {
   const runOf = (sessionID: Session.ID) =>
@@ -117,7 +117,7 @@ export function install(ctx: Pick<Context, "tool" | "permission" | "session" | "
     editor.add({
       name: "add",
       description:
-        "Add a work by DOI, URL or file: store its bytes, extract its text and build its structure tree. A PDF is stored, but its text is not extracted yet.",
+        "Add a work by DOI, URL or file: store its bytes, extract its text and build its structure tree. A PDF is read from its text layer, and every passage says its page; a scanned PDF is stored but has no text until OCR is built.",
       options: { namespace: "library", permission: "library" },
       input: Schema.Struct({
         doi: Schema.optional(Schema.String),
@@ -281,7 +281,7 @@ export function install(ctx: Pick<Context, "tool" | "permission" | "session" | "
         run(tool, (call) => Evidence.quote(store(), call, input)).pipe(
           Effect.map((result) => ({
             output: result,
-            content: `fragment ${result.fragment} from ${result.title} at ${result.address}\n${passage({ address: result.address, text: result.quote })}`,
+            content: `fragment ${result.fragment} from ${result.title} at ${result.address}\n${passage({ address: result.address, text: result.quote, page: result.page })}`,
           })),
         ),
     })

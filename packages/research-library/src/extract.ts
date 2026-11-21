@@ -6,6 +6,16 @@ export interface Block {
   readonly kind: BlockKind
   readonly text: string
   readonly level?: number
+  /** Where the block's text sits on a printed page, for formats that have pages (PDF). Offsets are UTF-16 indices into `text`. */
+  readonly layout?: readonly Placed[]
+}
+
+/** A run of a block's text and the box it was printed in: PDF user space, points, origin at the page's bottom left. */
+export interface Placed {
+  readonly start: number
+  readonly end: number
+  readonly page: number
+  readonly box: readonly [number, number, number, number]
 }
 
 export const TEXT_MIME = "text/plain"
@@ -13,7 +23,10 @@ export const MARKDOWN_MIME = "text/markdown"
 export const HTML_MIME = "text/html"
 export const PDF_MIME = "application/pdf"
 
-/** The extractor writes the text once; after this step nothing normalizes anything. */
+/**
+ * The extractor writes the text once; after this step nothing normalizes anything. PDFs are read asynchronously by
+ * `Pdf.blocks`, so this returns undefined for them.
+ */
 export function blocksOf(mime: string, bytes: Uint8Array): Block[] | undefined {
   const text = new TextDecoder("utf-8", { fatal: false }).decode(bytes)
   if (mime === HTML_MIME) return htmlBlocks(text)
