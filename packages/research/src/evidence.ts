@@ -1,7 +1,7 @@
 export * as Evidence from "./evidence.js"
 
 import { Canonical, Fragment, Graph, Ref, ResearchRecord, Tier } from "@opencode/research-record"
-import { Receipt, Workspace } from "@opencode/research-library"
+import { Receipt, Tree, Workspace } from "@opencode/research-library"
 import { Replay, type Store } from "@opencode/research-store"
 import { randomBytes } from "node:crypto"
 
@@ -28,6 +28,8 @@ export interface Quoted {
   readonly after: string
   readonly title: string
   readonly receipt: string
+  /** The printed page the quote starts on, for a text extracted from a PDF. */
+  readonly page?: number
 }
 
 /**
@@ -68,7 +70,7 @@ export function quote(
     selector,
     before: paragraph[from - 1]?.text ?? "",
     after: paragraph[from + chosen.length]?.text ?? "",
-    page: "none",
+    page: Tree.placement(located.tree, start, end),
   })
   const result = {
     fragment: fragment.objectId,
@@ -77,6 +79,7 @@ export function quote(
     before: fragment.body.before,
     after: fragment.body.after,
     title: located.entry.title,
+    ...(fragment.body.page === "none" ? {} : { page: fragment.body.page.number }),
   }
   const written = Receipt.commit(store, call, started, stored("evidence.quote", input, result), [fragment])
   return { ...result, receipt: written.receipt.objectId } satisfies Quoted
@@ -377,7 +380,7 @@ function render(
           ...line.cited.flatMap((cite) => [
             `> ${cite.fragment.body.selector.quote}`,
             "",
-            `— [${cite.number}] ${cite.role}${known.verified(ResearchRecord.refOf(cite.fragment)) ? "" : ", **the quote no longer matches its stored text**"}`,
+            `— [${cite.number}]${cite.fragment.body.page === "none" ? "" : ` p. ${cite.fragment.body.page.number},`} ${cite.role}${known.verified(ResearchRecord.refOf(cite.fragment)) ? "" : ", **the quote no longer matches its stored text**"}`,
             "",
           ]),
         ],

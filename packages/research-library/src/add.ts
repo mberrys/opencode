@@ -1,11 +1,12 @@
 export * as Add from "./add.js"
 
-import { Canonical, Ref, ResearchRecord } from "@opencode/research-record"
+import { Canonical, Graph, Ref, ResearchRecord } from "@opencode/research-record"
 import type { Store } from "@opencode/research-store"
 import path from "node:path"
 import { Extract } from "./extract.js"
 import { Fetch } from "./fetch.js"
 import { Metadata } from "./metadata.js"
+import { Pdf } from "./pdf.js"
 import { Receipt } from "./receipt.js"
 import { Tree } from "./tree.js"
 
@@ -30,7 +31,7 @@ export interface Options extends Receipt.Actor {
 
 /**
  * `added`: a source with a full-text copy and its text. `abstract-only`: the copy is an abstract. `metadata-only`: no
- * copy could be had. `no-text`: the copy is stored but no text was extracted (a PDF, for now). `existing`: these bytes
+ * copy could be had. `no-text`: the copy is stored but no text was extracted (a scanned PDF, until OCR is built). `existing`: these bytes
  * were already in the library, and their source is returned.
  */
 export type Status = "added" | "abstract-only" | "metadata-only" | "no-text" | "existing"
@@ -75,16 +76,36 @@ export async function add(store: Store.Store, input: Input, options: Options): P
   const copyBytes = draft.copy?.bytes
   const existing = copyBytes === undefined ? undefined : store.copiesOf(Canonical.blobDigest(copyBytes)).at(0)
   if (existing !== undefined) {
-    const output = { status: "existing" as const, source: existing.source, copy: existing.copy }
+    const graph = store.graph()
+    // A copy stored before its format could be read (a PDF before PDFs were) gets its text now; nothing else changes.
+    const copy = graph.get(existing.copy, "copy")
+    const extracted = hasText(graph, copy) ? undefined : represent(store, options, copy, await extract(draft))
+    const representation = extracted?.representation
+    const output = {
+      status: "existing" as const,
+      source: existing.source,
+      copy: existing.copy,
+      ...(representation === undefined ? {} : { representation: ResearchRecord.refOf(representation) }),
+    }
     // A proposed title still counts: it is recorded against the source that already holds the bytes.
     const metadata =
-      input.title === undefined
-        ? []
-        : [title(store, options, store.graph().get(existing.source, "source"), input.title)]
-    const written = Receipt.commit(store, options, started, tool(input, output), metadata)
-    return { ...output, receipt: written.receipt, seq: written.seq, notes: ["these bytes were already in the library"] }
+      input.title === undefined ? [] : [title(store, options, graph.get(existing.source, "source"), input.title)]
+    const written = Receipt.commit(store, options, started, tool(input, output), [
+      ...(representation === undefined ? [] : [representation]),
+      ...metadata,
+    ])
+    return {
+      ...output,
+      receipt: written.receipt,
+      seq: written.seq,
+      notes: [
+        "these bytes were already in the library",
+        ...(representation === undefined ? [] : ["their text had not been extracted, and now is"]),
+        ...(extracted?.notes ?? []),
+      ],
+    }
   }
-  const revisions = build(store, input, options, draft)
+  const revisions = build(store, input, options, draft, await extract(draft))
   const output = {
     status: revisions.status,
     source: ResearchRecord.refOf(revisions.source),
@@ -180,8 +201,37 @@ async function fromDoi(doi: string, options: Options): Promise<Draft> {
   }
 }
 
+interface Extraction {
+  readonly blocks: readonly Extract.Block[]
+  readonly extractor: { readonly id: string; readonly version: string }
+  readonly notes: readonly string[]
+}
+
+/** The copy's text as blocks. A PDF that pdf.js cannot open is still stored; it just has no text. */
+async function extract(draft: Draft): Promise<Extraction | undefined> {
+  if (draft.copy === undefined) return undefined
+  const { bytes, mediaType } = draft.copy
+  if (mediaType !== Extract.PDF_MIME) {
+    const blocks = Extract.blocksOf(mediaType, bytes)
+    return blocks === undefined
+      ? undefined
+      : { blocks, extractor: { id: extractorOf(mediaType), version: "1" }, notes: [] }
+  }
+  const extractor = { id: Pdf.ID, version: Pdf.VERSION }
+  const read = await Pdf.blocks(bytes).then(
+    (value) => value,
+    (error: unknown) => ({ error: error instanceof Error ? error.message : String(error) }),
+  )
+  if ("error" in read) return { blocks: [], extractor, notes: [`the PDF could not be read: ${read.error}`] }
+  return {
+    blocks: read.blocks,
+    extractor,
+    notes: read.dropped > 0 ? [`${read.dropped} running header, footer and page-number lines were left out`] : [],
+  }
+}
+
 /** The revisions an add writes. Every field names where it came from: the service's stored answer, or the copy. */
-function build(store: Store.Store, input: Input, options: Options, draft: Draft) {
+function build(store: Store.Store, input: Input, options: Options, draft: Draft, extraction: Extraction | undefined) {
   const response = draft.service === undefined ? undefined : store.admit(draft.service.response).digest
   const copyBlob = draft.copy === undefined ? undefined : store.admit(draft.copy.bytes).digest
   const fields = {
@@ -203,30 +253,49 @@ function build(store: Store.Store, input: Input, options: Options, draft: Draft)
     retrieved: { from: draft.copy.from, at: Receipt.now(options) },
     licence: "none",
   })
-  const blocks = Extract.blocksOf(draft.copy.mediaType, draft.copy.bytes)
-  const extracted = blocks === undefined ? undefined : Tree.build(blocks)
-  if (extracted === undefined || extracted.text.trim() === "") {
-    const note =
-      blocks === undefined
-        ? "text is not extracted from PDFs yet; the file is stored and can be quoted once it is"
-        : "the extractor found no text in this file"
-    return { status: "no-text" as const, source, copy, all: [source, copy, ...metadata], notes: [note] }
-  }
-  const representation = Receipt.program(store, options, "representation", {
-    copy: ResearchRecord.refOf(copy),
-    blob: store.admit(new TextEncoder().encode(extracted.text)).digest,
-    extractor: { id: extractorOf(draft.copy.mediaType), version: "1" },
-    tree: { digest: store.admit(Tree.encode(extracted.tree)).digest, schema: Tree.SCHEMA },
-    ocr: false,
-  })
+  const extracted = represent(store, options, copy, extraction)
+  if (extracted.representation === undefined)
+    return { status: "no-text" as const, source, copy, all: [source, copy, ...metadata], notes: extracted.notes }
   return {
     status: draft.copy.content === "abstract" ? ("abstract-only" as const) : ("added" as const),
     source,
     copy,
-    representation,
-    all: [source, copy, representation, ...metadata],
-    notes: [],
+    representation: extracted.representation,
+    all: [source, copy, extracted.representation, ...metadata],
+    notes: extracted.notes,
   }
+}
+
+/** The representation of a copy's text, or the reason there is none. */
+function represent(
+  store: Store.Store,
+  options: Options,
+  copy: ResearchRecord.Revision<"copy">,
+  extraction: Extraction | undefined,
+) {
+  const extracted = extraction === undefined ? undefined : Tree.build(extraction.blocks)
+  const notes = extraction?.notes ?? []
+  if (extraction === undefined || extracted === undefined || extracted.text.trim() === "") {
+    const note =
+      copy.body.mediaType === Extract.PDF_MIME
+        ? "the PDF has no text layer (a scan, perhaps); the file is stored, but OCR is not built yet, so it cannot be quoted"
+        : "the extractor found no text in this file"
+    return { representation: undefined, notes: [...notes, note] }
+  }
+  const representation = Receipt.program(store, options, "representation", {
+    copy: ResearchRecord.refOf(copy),
+    blob: store.admit(new TextEncoder().encode(extracted.text)).digest,
+    extractor: extraction.extractor,
+    tree: { digest: store.admit(Tree.encode(extracted.tree)).digest, schema: Tree.SCHEMA },
+    ocr: false,
+  })
+  return { representation, notes }
+}
+
+function hasText(graph: Graph.Graph, copy: ResearchRecord.Revision<"copy">) {
+  return graph
+    .heads(graph.lastSeq)
+    .some((entry) => entry.revision.kind === "representation" && entry.revision.body.copy.objectId === copy.objectId)
 }
 
 /**

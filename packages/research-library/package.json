@@ -17,7 +17,8 @@
   "dependencies": {
     "@opencode/research-record": "workspace:*",
     "@opencode/research-store": "workspace:*",
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "pdfjs-dist": "6.4.299"
   },
   "devDependencies": {
     "@tsconfig/bun": "catalog:",
