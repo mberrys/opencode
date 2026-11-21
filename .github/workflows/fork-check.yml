@@ -43,13 +43,18 @@ jobs:
       - name: Provide python
         run: command -v python || sudo ln -s "$(command -v python3)" /usr/local/bin/python
 
-      # Tests cannot run from the repository root, so each changed package runs its own `test` script. A manual run
-      # has no pull request to compare against and tests nothing.
+      # Tests cannot run from the repository root, so each changed package runs its own `test` script. A changed file
+      # belongs to the nearest directory above it with a package.json, so nested workspaces such as packages/plugins/*
+      # are found too. A manual run has no pull request to compare against and tests nothing.
       - name: Test changed packages
         if: github.event_name == 'pull_request'
         run: |
           set -euo pipefail
-          packages=$(git diff --name-only HEAD^1 HEAD | grep -E '^packages/[^/]+/' | cut -d/ -f1-2 | sort -u || true)
+          packages=$(git diff --name-only HEAD^1 HEAD | while read -r file; do
+            directory=$(dirname "$file")
+            while [ "$directory" != "." ] && [ ! -f "$directory/package.json" ]; do directory=$(dirname "$directory"); done
+            if [ "$directory" != "." ]; then echo "$directory"; fi
+          done | sort -u)
           for package in $packages; do
             if [ -f "$package/package.json" ] && jq -e '.scripts.test' "$package/package.json" > /dev/null; then
               echo "::group::$package"

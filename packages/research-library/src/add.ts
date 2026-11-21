@@ -76,7 +76,12 @@ export async function add(store: Store.Store, input: Input, options: Options): P
   const existing = copyBytes === undefined ? undefined : store.copiesOf(Canonical.blobDigest(copyBytes)).at(0)
   if (existing !== undefined) {
     const output = { status: "existing" as const, source: existing.source, copy: existing.copy }
-    const written = Receipt.commit(store, options, started, tool(input, output), [])
+    // A proposed title still counts: it is recorded against the source that already holds the bytes.
+    const metadata =
+      input.title === undefined
+        ? []
+        : [title(store, options, store.graph().get(existing.source, "source"), input.title)]
+    const written = Receipt.commit(store, options, started, tool(input, output), metadata)
     return { ...output, receipt: written.receipt, seq: written.seq, notes: ["these bytes were already in the library"] }
   }
   const revisions = build(store, input, options, draft)
@@ -109,6 +114,9 @@ async function acquire(input: Input, options: Options): Promise<Draft> {
 }
 
 async function fromFile(file: string, input: Input, options: Options): Promise<Draft> {
+  const limit = options.maxBytes ?? Fetch.MAX_BYTES
+  const size = Bun.file(file).size
+  if (size > limit) throw new Error(`${file} is ${size} bytes; the limit is ${limit}`)
   const bytes = new Uint8Array(await Bun.file(file).arrayBuffer())
   const mediaType = mediaTypeOf(file)
   // A file is still added when Crossref cannot be reached; its own metadata is used instead.
@@ -271,10 +279,7 @@ async function crossref(doi: string, options: Options) {
     },
   )
   if (fetched === undefined) return undefined
-  const body = parseJson(new TextDecoder().decode(fetched.bytes))
-  const work = Metadata.crossref(
-    typeof body === "object" && body !== null && "message" in body ? body.message : undefined,
-  )
+  const work = Metadata.crossref(new TextDecoder().decode(fetched.bytes))
   return work === undefined ? undefined : { work, response: fetched.bytes }
 }
 
@@ -304,12 +309,4 @@ function extractorOf(mediaType: string) {
   if (mediaType === Extract.HTML_MIME) return "research-html"
   if (mediaType === Extract.MARKDOWN_MIME) return "research-markdown"
   return "research-text"
-}
-
-function parseJson(text: string): unknown {
-  try {
-    return JSON.parse(text)
-  } catch {
-    return undefined
-  }
 }

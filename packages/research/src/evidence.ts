@@ -48,12 +48,9 @@ export function quote(
   const paragraph = located.tree.nodes.filter(
     (node) => node.kind === "sentence" && node.section === position.section && node.paragraph === position.paragraph,
   )
-  const from = Math.max(
-    0,
-    paragraph.findIndex((node) => (node.sentence ?? 0) >= (position.sentence ?? 0)),
-  )
+  const from = paragraph.findIndex((node) => (node.sentence ?? 0) >= (position.sentence ?? 0))
+  if (from === -1) throw new Error(`no sentence at ${input.address}`)
   const chosen = paragraph.slice(from, from + Math.max(1, Math.min(input.sentences ?? 1, 20)))
-  if (chosen.length === 0) throw new Error(`no sentence at ${input.address}`)
   const bytes = Workspace.text(store, located)
   const start = chosen[0].start
   const end = chosen[chosen.length - 1].end
@@ -168,6 +165,8 @@ export function gap(
   const graph = store.graph()
   const protocol = protocolOf(graph, call.context.run)
   if (protocol === undefined) throw new Error("a gap belongs to a sub-question of the run's protocol; write it first")
+  if (!protocol.body.subquestions.some((item) => item.id === input.subquestion))
+    throw new Error(`the protocol has no sub-question ${input.subquestion}`)
   if (input.searched.length === 0) throw new Error("a gap names the searches it rests on, by their receipts")
   const searched = input.searched.map((objectId) => ResearchRecord.refOf(head(graph, objectId, "receipt")))
   const judgment = authored(store, call, "judgment", Receipt.objectId("judgment"), {
