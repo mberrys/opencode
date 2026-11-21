@@ -35,13 +35,16 @@ You are given claim refs. Write sentences that each rest on one claim, in the or
 Compose the answer with research_answer, listing each sentence and the claim it rests on. Do not add citations in text; the program numbers them.`
 
 /**
- * The research agents may use their own tools without asking. Reading a file outside the project and fetching any URL
- * ask first: a reader acts on text fetched from the web, and an instruction hidden in a page must not be able to read
- * a private file and send it to another site unasked. Later rules win, so the project allowance comes after the
- * blanket ask, and the `.env` asks come last.
+ * The research agents may use their own tools and ask the researcher questions, and nothing else: no shell, no
+ * edits. Reading a file outside the project and fetching any URL ask first. A reader acts on text fetched from the
+ * web, and an instruction hidden in a page must not be able to read a private file and send it to another site
+ * unasked. An agent starts from a default that allows everything, and later rules win, so the deny comes first, the
+ * project allowance after the blanket read ask, and the `.env` asks last.
  */
 export function rules(directory: string): Permission.Rule[] {
   return [
+    { action: "*", resource: "*", effect: "deny" },
+    { action: "question", resource: "*", effect: "allow" },
     { action: "library", resource: "*", effect: "allow" },
     { action: "evidence", resource: "*", effect: "allow" },
     { action: "research", resource: "*", effect: "allow" },

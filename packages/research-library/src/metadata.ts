@@ -1,5 +1,7 @@
 export * as Metadata from "./metadata.js"
 
+import { Option, Schema } from "effect"
+
 /** A CSL-JSON name. */
 export interface Person {
   readonly family: string
@@ -55,23 +57,39 @@ export interface CrossrefWork {
   readonly abstract?: string
 }
 
-/** Maps a Crossref `message` to a CSL type and fields, or `undefined` when it names no title. */
-export function crossref(message: unknown): CrossrefWork | undefined {
-  if (typeof message !== "object" || message === null) return undefined
-  const work = message as {
-    title?: string[]
-    author?: { family?: string; given?: string; name?: string }[]
-    editor?: { family?: string; given?: string; name?: string }[]
-    issued?: { "date-parts"?: number[][] }
-    "container-title"?: string[]
-    publisher?: string
-    DOI?: string
-    type?: string
-    abstract?: string
-    page?: string
-    volume?: string
-    issue?: string
-  }
+const Name = Schema.Struct({
+  family: Schema.optional(Schema.String),
+  given: Schema.optional(Schema.String),
+  name: Schema.optional(Schema.String),
+})
+
+/** The part of a Crossref works answer the citation is read from. Fields Crossref leaves out stay out. */
+const CrossrefAnswer = Schema.Struct({
+  message: Schema.Struct({
+    title: Schema.optional(Schema.Array(Schema.String)),
+    author: Schema.optional(Schema.Array(Name)),
+    editor: Schema.optional(Schema.Array(Name)),
+    issued: Schema.optional(
+      Schema.Struct({ "date-parts": Schema.optional(Schema.Array(Schema.Array(Schema.Number))) }),
+    ),
+    "container-title": Schema.optional(Schema.Array(Schema.String)),
+    publisher: Schema.optional(Schema.String),
+    DOI: Schema.optional(Schema.String),
+    type: Schema.optional(Schema.String),
+    abstract: Schema.optional(Schema.String),
+    page: Schema.optional(Schema.String),
+    volume: Schema.optional(Schema.String),
+    issue: Schema.optional(Schema.String),
+  }),
+})
+
+const decodeCrossref = Schema.decodeUnknownOption(Schema.fromJsonString(CrossrefAnswer))
+
+/** Maps a Crossref works answer to a CSL type and fields, or `undefined` when it is not one or names no title. */
+export function crossref(answer: string): CrossrefWork | undefined {
+  const decoded = decodeCrossref(answer)
+  if (Option.isNone(decoded)) return undefined
+  const work = decoded.value.message
   const title = work.title?.[0]
   if (title === undefined) return undefined
   const authors = (work.author ?? []).flatMap(toPerson)
@@ -81,7 +99,7 @@ export function crossref(message: unknown): CrossrefWork | undefined {
   const fields: Record<string, Fields[string]> = { title }
   if (authors.length > 0) fields.author = authors
   if (editors.length > 0) fields.editor = editors
-  if (issued !== undefined) fields.issued = { "date-parts": [issued] }
+  if (issued !== undefined) fields.issued = { "date-parts": [[...issued]] }
   if (container !== undefined) fields["container-title"] = container
   if (work.publisher !== undefined) fields.publisher = work.publisher
   if (work.DOI !== undefined) fields.DOI = work.DOI
@@ -106,7 +124,7 @@ function cslType(type: string | undefined) {
   return "document"
 }
 
-function toPerson(person: { family?: string; given?: string; name?: string }): Person[] {
+function toPerson(person: typeof Name.Type): Person[] {
   const family = person.family ?? person.name
   if (family === undefined) return []
   return [{ family, ...(person.given === undefined ? {} : { given: person.given }) }]

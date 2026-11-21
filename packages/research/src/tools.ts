@@ -5,7 +5,7 @@ import { Add, Fetch, Find, Receipt } from "@opencode/research-library"
 import type { Store } from "@opencode/research-store"
 import type { Session } from "@opencode/schema/session"
 import { Tool } from "@opencode/schema/tool"
-import { Effect, Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
 import path from "node:path"
 import { Evidence } from "./evidence.js"
 
@@ -437,23 +437,33 @@ function stored(tool: string, input: unknown, output: unknown): Receipt.Tool {
 
 const OPENALEX = "https://api.openalex.org/works"
 
+const Text = Schema.optional(Schema.NullOr(Schema.String))
+
+/** The part of an OpenAlex works answer a search lists. OpenAlex sends null for a field it does not know. */
+const OpenAlexAnswer = Schema.Struct({
+  results: Schema.Array(
+    Schema.Struct({ title: Text, doi: Text, publication_year: Schema.optional(Schema.NullOr(Schema.Number)) }),
+  ),
+})
+
+const decodeOpenAlex = Schema.decodeUnknownOption(Schema.fromJsonString(OpenAlexAnswer))
+
 /** Works on OpenAlex matching `query`. The request asks the session's rules first, like any fetch. */
 async function scholar(query: string, limit: number, allow: Fetch.Options["allow"]) {
   const url = new URL(OPENALEX)
   url.searchParams.set("search", query)
   url.searchParams.set("per-page", String(Math.min(Math.max(limit, 1), 50)))
   const fetched = await Fetch.get(url, { allow, maxBytes: 5 * 1024 * 1024 })
-  const body = JSON.parse(new TextDecoder().decode(fetched.bytes)) as {
-    results?: { title?: string; doi?: string; publication_year?: number }[]
-  }
-  return (body.results ?? []).flatMap((work) =>
-    work.title === undefined
+  const answer = decodeOpenAlex(new TextDecoder().decode(fetched.bytes))
+  if (Option.isNone(answer)) throw new Error("OpenAlex did not answer with a list of works")
+  return answer.value.results.flatMap((work) =>
+    work.title === undefined || work.title === null
       ? []
       : [
           {
             title: work.title,
-            ...(work.doi === undefined ? {} : { doi: work.doi.replace(/^https:\/\/doi\.org\//, "") }),
-            ...(work.publication_year === undefined ? {} : { year: work.publication_year }),
+            ...(typeof work.doi === "string" ? { doi: work.doi.replace(/^https:\/\/doi\.org\//, "") } : {}),
+            ...(typeof work.publication_year === "number" ? { year: work.publication_year } : {}),
           },
         ],
   )

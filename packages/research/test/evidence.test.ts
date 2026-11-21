@@ -76,6 +76,11 @@ describe("quoting and claiming", () => {
     expect(lib.store.verify().ok).toBe(true)
   })
 
+  test("an address past the end of its paragraph is refused, not quoted from its first sentence", async () => {
+    const lib = await project()
+    expect(() => Evidence.quote(lib.store, call(), { address: `${lib.short}:1/p1/s9` })).toThrow("no sentence at")
+  })
+
   test("an agent may claim only from a fragment its own session cut", async () => {
     const lib = await project()
     const quoted = Evidence.quote(lib.store, call("session-a"), { address: `${lib.short}:1/p1/s1` })
@@ -126,6 +131,14 @@ describe("a run", () => {
     expect(() =>
       Evidence.gap(lib.store, reader(), { subquestion: "education", missing: "an estimate", searched: [], close: "x" }),
     ).toThrow("names the searches")
+    expect(() =>
+      Evidence.gap(lib.store, reader(), {
+        subquestion: "educaton",
+        missing: "an estimate",
+        searched: ["x"],
+        close: "x",
+      }),
+    ).toThrow("no sub-question educaton")
     const graph = lib.store.graph()
     const search = graph.heads(graph.lastSeq).findLast((entry) => entry.revision.kind === "receipt")!.revision
     Evidence.gap(lib.store, reader(), {
@@ -197,11 +210,15 @@ describe("run resolution", () => {
 })
 
 describe("the research agents' permissions", () => {
-  test("ask before every fetch and every read outside the project, and before reading .env files", () => {
-    // Later rules win: fetching always asks, reading asks unless it is in the project, and .env files ask again.
-    expect(
-      Agents.rules("/work/project").filter((rule) => rule.action === "webfetch" || rule.action === "read"),
-    ).toEqual([
+  test("deny everything but the research tools, and ask before every fetch and every read outside the project", () => {
+    // Later rules win over the agent's allow-everything default: the deny comes first, so shell and edits are refused,
+    // fetching always asks, reading asks unless it is in the project, and .env files ask again.
+    expect(Agents.rules("/work/project")).toEqual([
+      { action: "*", resource: "*", effect: "deny" },
+      { action: "question", resource: "*", effect: "allow" },
+      { action: "library", resource: "*", effect: "allow" },
+      { action: "evidence", resource: "*", effect: "allow" },
+      { action: "research", resource: "*", effect: "allow" },
       { action: "webfetch", resource: "*", effect: "ask" },
       { action: "read", resource: "*", effect: "ask" },
       { action: "read", resource: "/work/project/*", effect: "allow" },
