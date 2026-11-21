@@ -103,7 +103,6 @@ export function install(ctx: Pick<Context, "tool" | "permission" | "session" | "
             catch: failure,
           })
           return {
-            output: { works, receipt: written.receipt.objectId },
             content: [
               ...works.map(
                 (work) => `- ${work.title} (${work.year ?? "n.d."})${work.doi === undefined ? "" : ` doi:${work.doi}`}`,
@@ -149,7 +148,6 @@ export function install(ctx: Pick<Context, "tool" | "permission" | "session" | "
             catch: failure,
           })
           return {
-            output: added,
             content: [
               `${added.status}: source ${added.source.objectId}`,
               added.representation === undefined ? "no text extracted" : "text extracted",
@@ -167,7 +165,6 @@ export function install(ctx: Pick<Context, "tool" | "permission" | "session" | "
       execute: (input, tool) =>
         run(tool, () => Find.outline(store(), input.source)).pipe(
           Effect.map((result) => ({
-            output: result,
             content: [
               `${result.title} (${result.short})`,
               ...result.sections.map(
@@ -193,7 +190,6 @@ export function install(ctx: Pick<Context, "tool" | "permission" | "session" | "
       execute: (input, tool) =>
         run(tool, () => Find.read(store(), input)).pipe(
           Effect.map((result) => ({
-            output: result,
             content: [...result.sentences.map(passage), result.truncated ? "(more follows)" : "", result.note]
               .filter((line) => line !== "")
               .join("\n\n"),
@@ -219,7 +215,6 @@ export function install(ctx: Pick<Context, "tool" | "permission" | "session" | "
           return { ...result, receipt: written.receipt.objectId }
         }).pipe(
           Effect.map((result) => ({
-            output: result,
             content: [
               ...result.hits.map(passage),
               `${result.searched} sentences searched; receipt ${result.receipt}`,
@@ -245,7 +240,6 @@ export function install(ctx: Pick<Context, "tool" | "permission" | "session" | "
           return { ...result, receipt: written.receipt.objectId }
         }).pipe(
           Effect.map((result) => ({
-            output: result,
             content: [
               ...result.hits.map(passage),
               `${result.searched} paragraphs searched; receipt ${result.receipt}`,
@@ -262,7 +256,6 @@ export function install(ctx: Pick<Context, "tool" | "permission" | "session" | "
       execute: (input, tool) =>
         run(tool, () => Find.cites(store(), input.source)).pipe(
           Effect.map((result) => ({
-            output: result,
             content: [...result.entries.map(passage), result.note].filter((line) => line !== "").join("\n\n"),
           })),
         ),
@@ -280,7 +273,6 @@ export function install(ctx: Pick<Context, "tool" | "permission" | "session" | "
       execute: (input, tool) =>
         run(tool, (call) => Evidence.quote(store(), call, input)).pipe(
           Effect.map((result) => ({
-            output: result,
             content: `fragment ${result.fragment} from ${result.title} at ${result.address}\n${passage({ address: result.address, text: result.quote })}`,
           })),
         ),
@@ -303,7 +295,7 @@ export function install(ctx: Pick<Context, "tool" | "permission" | "session" | "
       }),
       execute: (input, tool) =>
         run(tool, (call) => Evidence.claim(store(), call, input)).pipe(
-          Effect.map((result) => ({ output: result, content: `claim ${result.claim}` })),
+          Effect.map((result) => ({ content: `claim ${result.claim}` })),
         ),
     })
 
@@ -320,7 +312,7 @@ export function install(ctx: Pick<Context, "tool" | "permission" | "session" | "
       }),
       execute: (input, tool) =>
         run(tool, (call) => Evidence.gap(store(), call, input)).pipe(
-          Effect.map((result) => ({ output: result, content: `gap ${result.gap}` })),
+          Effect.map((result) => ({ content: `gap ${result.gap}` })),
         ),
     })
 
@@ -332,7 +324,6 @@ export function install(ctx: Pick<Context, "tool" | "permission" | "session" | "
       execute: (_input, tool) =>
         run(tool, (call) => Evidence.check(store(), call.context.run === "none" ? undefined : call.context.run)).pipe(
           Effect.map((result) => ({
-            output: result,
             content: [
               result.record.ok ? "the record verifies" : `${result.record.problems.length} problems in the record`,
               `replay: ${result.replay.entries.length} steps, ${result.replay.mismatches} mismatches, ${result.replay.unverifiable} unverifiable`,
@@ -356,7 +347,7 @@ export function install(ctx: Pick<Context, "tool" | "permission" | "session" | "
       }),
       execute: (input, tool) =>
         run(tool, (call) => Evidence.protocol(store(), call, input)).pipe(
-          Effect.map((result) => ({ output: result, content: `protocol ${result.protocol} starts ${result.run}` })),
+          Effect.map((result) => ({ content: `protocol ${result.protocol} starts ${result.run}` })),
         ),
     })
 
@@ -369,7 +360,6 @@ export function install(ctx: Pick<Context, "tool" | "permission" | "session" | "
       execute: (_input, tool) =>
         run(tool, (call) => Evidence.status(store().graph(), call.context.run)).pipe(
           Effect.map((result) => ({
-            output: result,
             content:
               result.protocol === undefined
                 ? "no protocol yet: write one with research_protocol"
@@ -394,7 +384,7 @@ export function install(ctx: Pick<Context, "tool" | "permission" | "session" | "
       }),
       execute: (input, tool) =>
         run(tool, (call) => Evidence.answer(store(), call, input)).pipe(
-          Effect.map((result) => ({ output: result, content: result.markdown })),
+          Effect.map((result) => ({ content: result.markdown })),
         ),
     })
   })
