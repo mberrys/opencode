@@ -85,7 +85,9 @@ jobs:
       matrix:
         # Pull requests run Linux only; Windows runs the same tests on pushes, nightly runs and the release gate.
         settings: ${{ fromJSON(github.event_name == 'pull_request' && '[{"name":"linux","host":"blacksmith-4vcpu-ubuntu-2404"}]' || '[{"name":"linux","host":"blacksmith-4vcpu-ubuntu-2404"},{"name":"windows","host":"blacksmith-4vcpu-windows-2025"}]') }}
-    runs-on: ${{ matrix.settings.host }}
+    # The fork (mberrys/opencode) has no Blacksmith runners, so a job asking for one queues forever there; it runs on
+    # the GitHub-hosted image of the same OS instead.
+    runs-on: ${{ github.repository == 'mberrys/opencode' && (matrix.settings.name == 'windows' && 'windows-2025' || 'ubuntu-24.04') || matrix.settings.host }}
     defaults:
       run:
         shell: bash
