@@ -95,17 +95,17 @@ describe("research tools", () => {
         agent: {
           get: () => Effect.die("unused agent.get"),
           list: () => Effect.die("unused agent.list"),
-          transform: () => Effect.void,
+          transform: () => Effect.succeed({ dispose: Effect.void }),
           reload: () => Effect.die("unused agent.reload"),
         },
         skill: {
           list: () => Effect.die("unused skill.list"),
-          transform: () => Effect.void,
+          transform: () => Effect.succeed({ dispose: Effect.void }),
           reload: () => Effect.die("unused skill.reload"),
         },
         command: {
           list: () => Effect.die("unused command.list"),
-          transform: () => Effect.void,
+          transform: () => Effect.succeed({ dispose: Effect.void }),
           reload: () => Effect.die("unused command.reload"),
         },
       })
