@@ -27,6 +27,8 @@ export const registry = {
   sqlite_fts:
     "Build an SQLite full-text index of session titles and message text in the background, and enable the opencode.session.search and opencode.session.read tools. The index covers every session in the database and starts while any loaded location enables it; SQLite keeps it current from then on, also after this is turned off.",
   research: "Enable the research harness, a built-in plugin for answers cited to their sources.",
+  live_delivery:
+    "Enable experimental live delivery: the agent ships a working first version, then publishes checked versions until a time budget runs out, taking feedback as it goes.",
 } as const satisfies Record<string, string>
 export type Key = keyof typeof registry
 

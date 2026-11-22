@@ -2667,6 +2667,7 @@ export type ConfigEntry =
           project_overlay?: boolean
           sqlite_fts?: boolean
           research?: boolean
+          live_delivery?: boolean
           part_rows?: boolean
           image_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           subagent_depth?: number
