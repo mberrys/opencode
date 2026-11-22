@@ -2,6 +2,7 @@ export * as Tools from "./tools.js"
 
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { Add, Fetch, Find, Receipt } from "@opencode/research-library"
+import { Ref } from "@opencode/research-record"
 import type { Store } from "@opencode/research-store"
 import type { Session } from "@opencode/schema/session"
 import { Tool } from "@opencode/schema/tool"
@@ -89,6 +90,7 @@ export function install(ctx: Pick<Context, "tool" | "permission" | "session" | "
         query: Schema.String.annotate({ description: "Keywords in the field's own vocabulary." }),
         limit: Schema.optional(Schema.Number.annotate({ description: "How many works, up to 50." })),
       }),
+      output: FindOutput,
       execute: (input, tool) =>
         Effect.gen(function* () {
           const call = yield* callOf(tool)
@@ -125,6 +127,7 @@ export function install(ctx: Pick<Context, "tool" | "permission" | "session" | "
         file: Schema.optional(Schema.String.annotate({ description: "A path, relative to the project." })),
         title: Schema.optional(Schema.String),
       }),
+      output: AddOutput,
       execute: (input, tool) =>
         Effect.gen(function* () {
           // A relative path names a file in the project, and reading it goes through the session's rules.
@@ -164,6 +167,7 @@ export function install(ctx: Pick<Context, "tool" | "permission" | "session" | "
       description: "A work's sections, with how many paragraphs and sentences each holds.",
       options: { namespace: "library", permission: "library" },
       input: Schema.Struct({ source: Schema.String.annotate({ description: "A short address, such as ab12." }) }),
+      output: OutlineOutput,
       execute: (input, tool) =>
         run(tool, () => Find.outline(store(), input.source)).pipe(
           Effect.map((result) => ({
@@ -190,6 +194,7 @@ export function install(ctx: Pick<Context, "tool" | "permission" | "session" | "
         address: Schema.String.annotate({ description: "ab12, ab12:2 or ab12:2/p3/s1" }),
         limit: Schema.optional(Schema.Number),
       }),
+      output: ReadOutput,
       execute: (input, tool) =>
         run(tool, () => Find.read(store(), input)).pipe(
           Effect.map((result) => ({
@@ -211,6 +216,7 @@ export function install(ctx: Pick<Context, "tool" | "permission" | "session" | "
         source: Schema.optional(Schema.String),
         limit: Schema.optional(Schema.Number),
       }),
+      output: GrepOutput,
       execute: (input, tool) =>
         run(tool, (call) => {
           const started = Receipt.now(call)
@@ -237,6 +243,7 @@ export function install(ctx: Pick<Context, "tool" | "permission" | "session" | "
         source: Schema.optional(Schema.String),
         limit: Schema.optional(Schema.Number),
       }),
+      output: SearchOutput,
       execute: (input, tool) =>
         run(tool, (call) => {
           const started = Receipt.now(call)
@@ -259,6 +266,7 @@ export function install(ctx: Pick<Context, "tool" | "permission" | "session" | "
       description: "A work's reference list, as printed.",
       options: { namespace: "library", permission: "library" },
       input: Schema.Struct({ source: Schema.String }),
+      output: CitesOutput,
       execute: (input, tool) =>
         run(tool, () => Find.cites(store(), input.source)).pipe(
           Effect.map((result) => ({
@@ -277,6 +285,7 @@ export function install(ctx: Pick<Context, "tool" | "permission" | "session" | "
         address: Schema.String,
         sentences: Schema.optional(Schema.Number.annotate({ description: "How many sentences, 1 to 20." })),
       }),
+      output: QuoteOutput,
       execute: (input, tool) =>
         run(tool, (call) => Evidence.quote(store(), call, input)).pipe(
           Effect.map((result) => ({
@@ -301,6 +310,7 @@ export function install(ctx: Pick<Context, "tool" | "permission" | "session" | "
         ),
         subquestion: Schema.optional(Schema.String),
       }),
+      output: ClaimOutput,
       execute: (input, tool) =>
         run(tool, (call) => Evidence.claim(store(), call, input)).pipe(
           Effect.map((result) => ({ output: result, content: `claim ${result.claim}` })),
@@ -318,6 +328,7 @@ export function install(ctx: Pick<Context, "tool" | "permission" | "session" | "
         searched: Schema.Array(Schema.String),
         close: Schema.String,
       }),
+      output: GapOutput,
       execute: (input, tool) =>
         run(tool, (call) => Evidence.gap(store(), call, input)).pipe(
           Effect.map((result) => ({ output: result, content: `gap ${result.gap}` })),
@@ -329,6 +340,7 @@ export function install(ctx: Pick<Context, "tool" | "permission" | "session" | "
       description: "Recheck the whole record and replay this run's receipts.",
       options: { namespace: "evidence", permission: "evidence" },
       input: Schema.Struct({}),
+      output: CheckOutput,
       execute: (_input, tool) =>
         run(tool, (call) => Evidence.check(store(), call.context.run === "none" ? undefined : call.context.run)).pipe(
           Effect.map((result) => ({
@@ -354,6 +366,7 @@ export function install(ctx: Pick<Context, "tool" | "permission" | "session" | "
         plan: Schema.String,
         effort: Schema.Literals(["fast", "standard", "deep"]),
       }),
+      output: ProtocolOutput,
       execute: (input, tool) =>
         run(tool, (call) => Evidence.protocol(store(), call, input)).pipe(
           Effect.map((result) => ({ output: result, content: `protocol ${result.protocol} starts ${result.run}` })),
@@ -366,6 +379,7 @@ export function install(ctx: Pick<Context, "tool" | "permission" | "session" | "
         "What this run still owes: sub-questions with neither a claim nor a gap, and claims with no evidence.",
       options: { namespace: "research", permission: "research" },
       input: Schema.Struct({}),
+      output: StatusOutput,
       execute: (_input, tool) =>
         run(tool, (call) => Evidence.status(store().graph(), call.context.run)).pipe(
           Effect.map((result) => ({
@@ -392,6 +406,7 @@ export function install(ctx: Pick<Context, "tool" | "permission" | "session" | "
       input: Schema.Struct({
         sentences: Schema.Array(Schema.Struct({ text: Schema.String, claim: Schema.optional(Schema.String) })),
       }),
+      output: AnswerOutput,
       execute: (input, tool) =>
         run(tool, (call) => Evidence.answer(store(), call, input)).pipe(
           Effect.map((result) => ({ output: result, content: result.markdown })),
@@ -399,6 +414,138 @@ export function install(ctx: Pick<Context, "tool" | "permission" | "session" | "
     })
   })
 }
+
+// What each tool returns to the program that called it. A tool that returns `output` must declare its schema, or core
+// refuses the result after the record has already been written. Fields not named here are dropped on the way out.
+// Enumerations owned by the library and the store are typed as strings here, so a new value there never fails a call.
+
+const Passage = Schema.Struct({ address: Schema.String, text: Schema.String })
+
+const Sentence = Schema.Struct({ ...Passage.fields, start: Schema.Number, end: Schema.Number })
+
+const Located = { source: Ref.Exact, short: Schema.String, title: Schema.String }
+
+const FindOutput = Schema.Struct({
+  works: Schema.Array(
+    Schema.Struct({ title: Schema.String, doi: Schema.optional(Schema.String), year: Schema.optional(Schema.Number) }),
+  ),
+  receipt: Schema.String,
+})
+
+const AddOutput = Schema.Struct({
+  status: Schema.String,
+  source: Ref.Exact,
+  copy: Schema.optional(Ref.Exact),
+  representation: Schema.optional(Ref.Exact),
+  receipt: Ref.Exact,
+  seq: Schema.Number,
+  notes: Schema.Array(Schema.String),
+})
+
+const OutlineOutput = Schema.Struct({
+  ...Located,
+  representation: Schema.optional(Ref.Exact),
+  sections: Schema.Array(
+    Schema.Struct({
+      section: Schema.Number,
+      heading: Schema.String,
+      path: Schema.Array(Schema.String),
+      paragraphs: Schema.Number,
+      sentences: Schema.Number,
+    }),
+  ),
+  note: Schema.String,
+})
+
+const ReadOutput = Schema.Struct({
+  source: Ref.Exact,
+  short: Schema.String,
+  representation: Ref.Exact,
+  address: Schema.String,
+  sentences: Schema.Array(Sentence),
+  truncated: Schema.Boolean,
+  note: Schema.String,
+})
+
+const GrepOutput = Schema.Struct({
+  hits: Schema.Array(Schema.Struct({ ...Sentence.fields, ...Located })),
+  truncated: Schema.Boolean,
+  searched: Schema.Number,
+  receipt: Schema.String,
+})
+
+const SearchOutput = Schema.Struct({
+  hits: Schema.Array(Schema.Struct({ ...Passage.fields, ...Located, score: Schema.Number })),
+  truncated: Schema.Boolean,
+  searched: Schema.Number,
+  receipt: Schema.String,
+})
+
+const CitesOutput = Schema.Struct({
+  source: Ref.Exact,
+  short: Schema.String,
+  entries: Schema.Array(Passage),
+  note: Schema.String,
+})
+
+const QuoteOutput = Schema.Struct({
+  fragment: Schema.String,
+  address: Schema.String,
+  quote: Schema.String,
+  before: Schema.String,
+  after: Schema.String,
+  title: Schema.String,
+  receipt: Schema.String,
+})
+
+const ClaimOutput = Schema.Struct({ claim: Schema.String, evidence: Schema.Array(Schema.String), receipt: Schema.String })
+
+const GapOutput = Schema.Struct({ gap: Schema.String, receipt: Schema.String })
+
+const CheckOutput = Schema.Struct({
+  record: Schema.Struct({
+    ok: Schema.Boolean,
+    headSeq: Schema.Number,
+    headDigest: Schema.String,
+    problems: Schema.Array(
+      Schema.Struct({
+        reason: Schema.String,
+        seq: Schema.optional(Schema.Number),
+        revisionId: Schema.optional(Schema.String),
+        digest: Schema.optional(Schema.String),
+        message: Schema.optional(Schema.String),
+      }),
+    ),
+  }),
+  replay: Schema.Struct({
+    ok: Schema.Boolean,
+    entries: Schema.Array(
+      Schema.Struct({
+        seq: Schema.Number,
+        receipt: Ref.Exact,
+        step: Schema.String,
+        status: Schema.String,
+        detail: Schema.String,
+      }),
+    ),
+    mismatches: Schema.Number,
+    unverifiable: Schema.Number,
+  }),
+})
+
+const ProtocolOutput = Schema.Struct({ protocol: Schema.String, run: Schema.String, receipt: Schema.String })
+
+const StatusOutput = Schema.Struct({
+  protocol: Schema.optional(Schema.String),
+  question: Schema.optional(Schema.String),
+  claims: Schema.Number,
+  gaps: Schema.Number,
+  open: Schema.Array(
+    Schema.Struct({ subquestion: Schema.optional(Schema.String), detail: Schema.String, close: Schema.String }),
+  ),
+})
+
+const AnswerOutput = Schema.Struct({ answer: Schema.String, receipt: Schema.String, markdown: Schema.String })
 
 /**
  * The run a session works in: the newest protocol it wrote, or else its parent's run. A reader or writer runs in a
