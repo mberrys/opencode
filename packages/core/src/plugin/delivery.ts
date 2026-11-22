@@ -583,6 +583,7 @@ export const Plugin = define({
             "Read the live delivery: the objective, the time left, the published versions, the planned version, and feedback no version has answered yet. Read it at phase changes, not to fill time.",
           options: { namespace: "delivery", codemode: false },
           input: Schema.Struct({}),
+          output: Schema.Struct({ delivery: Delivery.State, feedback: Schema.Array(Delivery.Feedback) }),
           execute: (_input, tool) =>
             Effect.gen(function* () {
               const delivery = yield* current(tool.sessionID)
