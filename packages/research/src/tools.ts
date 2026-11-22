@@ -30,10 +30,20 @@ export function install(ctx: Pick<Context, "tool" | "permission" | "session" | "
       ),
     )
 
+  // Every tool a Code Mode program calls carries the program's own call id, and a commit key may write only once. So
+  // the key numbers the calls made under one call id in this process. A program that runs again after a restart
+  // makes the same keys, and its first write is refused as a retry.
+  const made = new Map<string, number>()
+  const keyOf = (id: string) => {
+    const n = made.get(id) ?? 0
+    made.set(id, n + 1)
+    return `${id}#${n}`
+  }
+
   const callOf = (tool: Tool.Context) =>
     Effect.map(runOf(tool.sessionID), (run) => ({
       program: PROGRAM,
-      key: tool.id,
+      key: keyOf(tool.id),
       context: {
         run,
         session: tool.sessionID,
