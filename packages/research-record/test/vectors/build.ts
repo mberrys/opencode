@@ -255,7 +255,7 @@ const table = add(
   "artifact table",
   5,
   base("artifact", "artifact-table", program, inSession("call-script"), {
-    inputs: [source],
+    inputs: sortRefs([source, fragment]),
     output: { digest: blob("count,2").digest, schema: "none", mediaType: "text/csv" },
     transformation: "codemode.script",
   }),

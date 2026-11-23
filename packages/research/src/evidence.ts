@@ -1,7 +1,7 @@
 export * as Evidence from "./evidence.js"
 
 import { Canonical, Fragment, Graph, Ref, ResearchRecord, Tier } from "@opencode/research-record"
-import { Receipt, Workspace } from "@opencode/research-library"
+import { Compute, Receipt, Workspace } from "@opencode/research-library"
 import { Replay, type Store } from "@opencode/research-store"
 import { randomBytes } from "node:crypto"
 
@@ -83,15 +83,72 @@ export function quote(
 }
 
 /**
- * Writes a claim and one evidence link per fragment. An agent may cite only a fragment its own session cut, so a
- * citation is never typed from memory; the refusal says how to fix it.
+ * Runs a computation and records it: the script, its inputs and its result are stored, and the result is exactly what
+ * the caller is shown. Every input names the fragment it was read from, and that fragment's quote must contain the
+ * number, so a computation cannot rest on a number no source states; an agent may name only fragments its own session
+ * cut. A claim cites the computation by the returned id, and it counts as computed only while it replays.
+ */
+export function compute(
+  store: Store.Store,
+  call: Call,
+  input: {
+    readonly expression: string
+    readonly inputs: Readonly<Record<string, { readonly value: number; readonly fragment: string }>>
+  },
+) {
+  const graph = store.graph()
+  const named = Object.entries(input.inputs).map(([name, item]) => ({
+    name,
+    value: item.value,
+    fragment: head(graph, item.fragment, "fragment"),
+  }))
+  named.forEach((item) => {
+    if (
+      call.context.initiator.voice === "agent" &&
+      !cutIn(graph, call.context.session, ResearchRecord.refOf(item.fragment))
+    )
+      throw new Error(
+        `${item.fragment.objectId} was never shown to this session. Cut it with evidence_quote first, then compute.`,
+      )
+    if (!numbersIn(item.fragment.body.selector.quote).includes(item.value))
+      throw new Error(
+        `${item.name} is ${item.value}, which fragment ${item.fragment.objectId} does not state. Quote the passage that states it, then compute.`,
+      )
+  })
+  const from = [
+    ...new Map(named.map((item) => [item.fragment.revisionId, ResearchRecord.refOf(item.fragment)])).values(),
+  ]
+  const computed = Compute.record(store, call, {
+    expression: input.expression,
+    inputs: Object.fromEntries(named.map((item) => [item.name, item.value])),
+    from,
+  })
+  return {
+    computation: computed.artifact.objectId,
+    result: computed.result,
+    value: computed.value,
+    receipt: computed.receipt.objectId,
+  }
+}
+
+/** One piece of evidence: exactly one of a fragment or a computation, with its role. */
+export interface Cite {
+  readonly fragment?: string
+  readonly computation?: string
+  readonly role: Role
+}
+
+/**
+ * Writes a claim and one evidence link per fragment or computation it cites. An agent may cite only a fragment its own
+ * session cut, or a computation its own session ran, so a citation is never typed from memory; the refusal says how to
+ * fix it.
  */
 export function claim(
   store: Store.Store,
   call: Call,
   input: {
     readonly text: string
-    readonly evidence: readonly { readonly fragment: string; readonly role: Role }[]
+    readonly evidence: readonly Cite[]
     readonly subquestion?: string
   },
 ) {
@@ -100,17 +157,42 @@ export function claim(
   if (text === "") throw new Error("a claim needs words")
   if (input.evidence.length === 0) throw new Error("a claim needs at least one piece of evidence")
   const graph = store.graph()
-  const fragments = input.evidence.map((item) => ({
-    role: item.role,
-    fragment: head(graph, item.fragment, "fragment"),
-  }))
-  if (call.context.initiator.voice === "agent")
-    fragments.forEach((item) => {
-      if (!cutIn(graph, call.context.session, ResearchRecord.refOf(item.fragment)))
+  const agent = call.context.initiator.voice === "agent"
+  const bases = input.evidence.map((item) => {
+    if (item.fragment === undefined) {
+      if (item.computation === undefined)
+        throw new Error("each piece of evidence names exactly one fragment or one computation")
+      const output = ResearchRecord.refOf(head(graph, item.computation, "artifact"))
+      const run = computedIn(graph, output)
+      if (run === undefined) throw new Error(`${item.computation} is not a computation`)
+      if (agent && (run.context === "none" || run.context.session !== call.context.session))
         throw new Error(
-          `${item.fragment.objectId} was never shown to this session. Cut it with evidence_quote first, then claim.`,
+          `${item.computation} was not computed in this session. Run it with evidence_compute first, then claim.`,
         )
-    })
+      return { role: item.role, basis: { kind: "computation" as const, run: ResearchRecord.refOf(run), output } }
+    }
+    if (item.computation !== undefined)
+      throw new Error("each piece of evidence names exactly one fragment or one computation")
+    const fragment = head(graph, item.fragment, "fragment")
+    if (agent && !cutIn(graph, call.context.session, ResearchRecord.refOf(fragment)))
+      throw new Error(
+        `${fragment.objectId} was never shown to this session. Cut it with evidence_quote first, then claim.`,
+      )
+    return {
+      role: item.role,
+      basis: {
+        kind: "quote" as const,
+        cited: [
+          {
+            fragment: ResearchRecord.refOf(fragment),
+            read: [{ start: 0, end: new TextEncoder().encode(fragment.body.selector.quote).length }],
+            insertions: [],
+            secondary: "no" as const,
+          },
+        ],
+      },
+    }
+  })
   const protocol = input.subquestion === undefined ? undefined : protocolOf(graph, call.context.run)
   if (input.subquestion !== undefined && protocol === undefined)
     throw new Error("a claim addresses a sub-question of the run's protocol; write the protocol first")
@@ -124,21 +206,11 @@ export function claim(
         ? "none"
         : { protocol: ResearchRecord.refOf(protocol), subquestion: input.subquestion },
   })
-  const links = fragments.map((item) =>
+  const links = bases.map((item) =>
     authored(store, call, "evidence", Receipt.objectId("evidence"), {
       claim: ResearchRecord.refOf(claimed),
       role: item.role,
-      basis: {
-        kind: "quote",
-        cited: [
-          {
-            fragment: ResearchRecord.refOf(item.fragment),
-            read: [{ start: 0, end: new TextEncoder().encode(item.fragment.body.selector.quote).length }],
-            insertions: [],
-            secondary: "no",
-          },
-        ],
-      },
+      basis: item.basis,
       note: "",
     }),
   )
@@ -276,10 +348,16 @@ export function status(graph: Graph.Graph, run: string) {
  * unverifiable step.
  */
 export function check(store: Store.Store, run: string | undefined) {
-  return { record: store.verify(), replay: Replay.run(store, run === undefined ? {} : { run }) }
+  return {
+    record: store.verify(),
+    replay: Replay.run(store, { script: Compute.replay, ...(run === undefined ? {} : { run }) }),
+  }
 }
 
-/** The facts a tier needs that the record cannot state about itself, from the store and the session's own cuts. */
+/**
+ * The facts a tier needs that the record cannot state about itself, from the store and the session's own cuts. A
+ * computation counts only when its script runs again here to the recorded result.
+ */
 export function facts(store: Store.Reader, graph: Graph.Graph): Tier.Facts {
   return {
     verified: (fragment) => verifies(store, graph.get(fragment, "fragment")),
@@ -287,7 +365,7 @@ export function facts(store: Store.Reader, graph: Graph.Graph): Tier.Facts {
       const link = graph.get(evidence)
       return cutIn(graph, link.context === "none" ? "none" : link.context.session, fragment, graph.entry(evidence).seq)
     },
-    replayed: () => false,
+    replayed: (run) => Replay.receipt(store, run, { script: Compute.replay }).status === "match",
   }
 }
 
@@ -359,12 +437,18 @@ function render(
           })
         : [],
     )
-    return { item, derived, cited }
+    const computed = evidenceOf(graph, ref).flatMap((link) =>
+      link.body.basis.kind === "computation"
+        ? [{ role: link.body.role, run: link.body.basis.run, output: graph.get(link.body.basis.output, "artifact") }]
+        : [],
+    )
+    return { item, derived, cited, computed }
   })
-  const marker = (line: (typeof lines)[number]) =>
-    line === undefined
-      ? " _(unsupported)_"
-      : ` [${[...new Set(line.cited.map((cite) => cite.number))].join(", ")}]${line.derived.tier === "quoted" || line.derived.tier === "adopted" ? "" : ` _(${line.derived.tier})_`}`
+  const marker = (line: (typeof lines)[number]) => {
+    if (line === undefined) return " _(unsupported)_"
+    const numbers = [...new Set(line.cited.map((cite) => cite.number))]
+    return `${numbers.length === 0 ? "" : ` [${numbers.join(", ")}]`}${line.derived.tier === "quoted" || line.derived.tier === "adopted" ? "" : ` _(${line.derived.tier})_`}`
+  }
   const body = sentences.map((sentence, index) => `${sentence.text}${marker(lines[index])}`).join(" ")
   const evidence = lines.flatMap((line) =>
     line === undefined
@@ -378,6 +462,12 @@ function render(
             `> ${cite.fragment.body.selector.quote}`,
             "",
             `— [${cite.number}] ${cite.role}${known.verified(ResearchRecord.refOf(cite.fragment)) ? "" : ", **the quote no longer matches its stored text**"}`,
+            "",
+          ]),
+          ...line.computed.flatMap((computation) => [
+            `> ${computationOf(store, graph, computation.run)}`,
+            "",
+            `— computation ${computation.output.objectId}, ${computation.role}${known.replayed(computation.run) ? "" : ", **the computation does not replay to its recorded result**"}`,
             "",
           ]),
         ],
@@ -453,6 +543,40 @@ function cutIn(graph: Graph.Graph, session: string, fragment: Ref.Exact, asOfSeq
       entry.revision.body.step.tool === "evidence.quote" &&
       entry.revision.body.written.some((written) => Ref.equals(written, fragment)),
   )
+}
+
+/** The numbers a quote states, such as 35 in "35%" and 1234.5 in "1,234.5". */
+function numbersIn(quote: string) {
+  return (quote.match(/\d[\d,]*(?:\.\d+)?/g) ?? []).map((match) => Number(match.replaceAll(",", "")))
+}
+
+/** The script receipt that wrote a computation's artifact, or `undefined` when no script wrote it. */
+function computedIn(graph: Graph.Graph, artifact: Ref.Exact) {
+  return graph.entries
+    .map((entry) => entry.revision)
+    .find(
+      (revision): revision is ResearchRecord.Revision<"receipt"> =>
+        revision.kind === "receipt" &&
+        revision.body.step.kind === "script" &&
+        revision.body.written.some((written) => Ref.equals(written, artifact)),
+    )
+}
+
+/** A computation as `expression = result`, read from its stored script and result; damage reads as unreadable. */
+function computationOf(store: Store.Reader, graph: Graph.Graph, run: Ref.Exact) {
+  const step = graph.get(run, "receipt").body.step
+  if (step.kind !== "script" || step.result === "none") return "(no result)"
+  const read = (digest: string) => {
+    try {
+      return new TextDecoder().decode(store.readBlob(digest as Canonical.Digest))
+    } catch {
+      return undefined
+    }
+  }
+  const script = read(step.script.digest)
+  const result = read(step.result.digest)
+  if (script === undefined || result === undefined) return "(the stored script or result cannot be read)"
+  return `\`${script}\` = \`${result}\``
 }
 
 function evidenceOf(graph: Graph.Graph, claim: Ref.Exact) {

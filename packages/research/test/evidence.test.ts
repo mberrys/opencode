@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test"
-import { Add, Find } from "@opencode/research-library"
-import { Store } from "@opencode/research-store"
+import { Add, Compute, Find, Receipt } from "@opencode/research-library"
+import { Canonical, ResearchRecord } from "@opencode/research-record"
+import { Layout, Store } from "@opencode/research-store"
 import { Session } from "@opencode/schema/session"
 import { Effect } from "effect"
 import fs from "node:fs"
@@ -19,6 +20,8 @@ const PAPER = [
   "Union decline explains about a fifth of the rise in wage inequality. The rest comes from changes in the returns to education.",
   "",
   "Some argue unions mattered little. They point to trade instead.",
+  "",
+  "Union density fell from 35% to 11% between 1979 and 2019.",
 ].join("\n")
 
 const made: string[] = []
@@ -177,6 +180,156 @@ describe("a run", () => {
     const artifact = graph.heads(graph.lastSeq).find((entry) => entry.revision.objectId === answered.answer)!.revision
     expect(artifact).toMatchObject({ kind: "artifact", body: { transformation: "research.answer@1" } })
     expect(Evidence.check(lib.store, started.run)).toMatchObject({ record: { ok: true }, replay: { mismatches: 0 } })
+  })
+})
+
+describe("a computation", () => {
+  /** The stored script of the share computation. */
+  const script = { expression: "(before - after) / before * 100", inputs: { before: 35, after: 11 } }
+  /** The share computation, each input naming the fragment that states it. */
+  const share = (fragment: string) => ({
+    expression: script.expression,
+    inputs: { before: { value: 35, fragment }, after: { value: 11, fragment } },
+  })
+
+  /** A run in which a reader quoted the paper's numbers, so it can compute from them. */
+  async function computing() {
+    const lib = await project()
+    const started = Evidence.protocol(lib.store, call("session-lead"), plan)
+    const reader = () => call("session-reader", started.run)
+    const quoted = Evidence.quote(lib.store, reader(), { address: `${lib.short}:1/p3/s1` })
+    return { lib, started, reader, quoted }
+  }
+
+  const answer = (lib: Awaited<ReturnType<typeof project>>, run: string, claim: string) =>
+    Evidence.answer(lib.store, call("session-writer", run), {
+      sentences: [{ text: "Union density fell by about two thirds.", claim }],
+    })
+
+  test("backs a claim at the computed tier, and replays to its recorded result", async () => {
+    const run = await computing()
+    const computed = Evidence.compute(run.lib.store, run.reader(), share(run.quoted.fragment))
+    expect(computed).toMatchObject({ value: (24 / 35) * 100, result: `{"value":${(24 / 35) * 100}}` })
+    const graph = run.lib.store.graph()
+    const artifact = graph.heads(graph.lastSeq).find((entry) => entry.revision.objectId === computed.computation)!
+    expect(artifact.revision).toMatchObject({ kind: "artifact", body: { transformation: "research.compute@1" } })
+
+    expect(() =>
+      Evidence.claim(run.lib.store, call("session-other", run.started.run), {
+        text: "Union density fell by about two thirds.",
+        evidence: [{ computation: computed.computation, role: "supports" }],
+      }),
+    ).toThrow("not computed in this session")
+    const claimed = Evidence.claim(run.lib.store, run.reader(), {
+      text: "Union density fell by about two thirds.",
+      evidence: [{ computation: computed.computation, role: "supports" }],
+      subquestion: "unions",
+    })
+    const answered = answer(run.lib, run.started.run, claimed.claim)
+    expect(answered.markdown).toContain("Union density fell by about two thirds. _(computed)_")
+    expect(answered.markdown).toContain("Tier: **computed**")
+    expect(answered.markdown).toContain(`computation ${computed.computation}, supports`)
+    expect(answered.markdown).not.toContain("does not replay")
+    const checked = Evidence.check(run.lib.store, run.started.run)
+    expect(checked).toMatchObject({ record: { ok: true }, replay: { ok: true, mismatches: 0, unverifiable: 0 } })
+    expect(checked.replay.entries.filter((entry) => entry.step === "script research.compute")).toEqual([
+      expect.objectContaining({ status: "match" }),
+    ])
+  })
+
+  test("needs each input stated by a fragment this session cut", async () => {
+    const run = await computing()
+    const elsewhere = Evidence.quote(run.lib.store, run.reader(), { address: `${run.lib.short}:1/p1/s1` })
+    const head = run.lib.store.head()
+    expect(() =>
+      Evidence.compute(run.lib.store, run.reader(), {
+        expression: "before - after",
+        inputs: {
+          before: { value: 35, fragment: run.quoted.fragment },
+          after: { value: 12, fragment: run.quoted.fragment },
+        },
+      }),
+    ).toThrow(`after is 12, which fragment ${run.quoted.fragment} does not state`)
+    expect(() => Evidence.compute(run.lib.store, run.reader(), share(elsewhere.fragment))).toThrow(
+      `before is 35, which fragment ${elsewhere.fragment} does not state`,
+    )
+    expect(() =>
+      Evidence.compute(run.lib.store, call("session-other", run.started.run), share(run.quoted.fragment)),
+    ).toThrow("never shown to this session")
+    expect(run.lib.store.head()).toEqual(head)
+  })
+
+  test("that does not evaluate is refused, and evidence names exactly one fragment or computation", async () => {
+    const run = await computing()
+    const before = run.lib.store.head()
+    expect(() => Evidence.compute(run.lib.store, run.reader(), { expression: "before / 0", inputs: {} })).toThrow(
+      "unknown name before",
+    )
+    expect(() => Evidence.compute(run.lib.store, run.reader(), { expression: "1 / 0", inputs: {} })).toThrow(
+      "not a finite number",
+    )
+    expect(run.lib.store.head()).toEqual(before)
+    expect(() =>
+      Evidence.claim(run.lib.store, run.reader(), { text: "Nothing.", evidence: [{ role: "supports" }] }),
+    ).toThrow("exactly one fragment or one computation")
+  })
+
+  test("whose stored script was tampered with fails replay and drops the tier", async () => {
+    const run = await computing()
+    const computed = Evidence.compute(run.lib.store, run.reader(), share(run.quoted.fragment))
+    const claimed = Evidence.claim(run.lib.store, run.reader(), {
+      text: "Union density fell by about two thirds.",
+      evidence: [{ computation: computed.computation, role: "supports" }],
+    })
+    const graph = run.lib.store.graph()
+    const receipt = graph.heads(graph.lastSeq).find((entry) => entry.revision.objectId === computed.receipt)!.revision
+    if (receipt.kind !== "receipt" || receipt.body.step.kind !== "script") throw new Error("expected a script receipt")
+    fs.writeFileSync(
+      Layout.blobPath(run.lib.store.layout, receipt.body.step.script.digest),
+      '{"expression":"1","inputs":{}}',
+    )
+    const answered = answer(run.lib, run.started.run, claimed.claim)
+    expect(answered.markdown).toContain("Tier: **unsupported**")
+    expect(answered.markdown).toContain("the computation does not replay to its recorded result")
+    expect(Evidence.check(run.lib.store, run.started.run).replay).toMatchObject({ ok: false, mismatches: 1 })
+  })
+
+  test("whose recorded result is not what its script computes fails replay and stays unsupported", async () => {
+    const run = await computing()
+    const reader = run.reader()
+    // A forged run: the program's own script, but a result it never computed.
+    const result = run.lib.store.admit(new TextEncoder().encode('{"value":99}')).digest
+    const stored = run.lib.store.admit(new TextEncoder().encode(Canonical.json(script))).digest
+    const artifact = Receipt.program(run.lib.store, reader, "artifact", {
+      inputs: [],
+      output: { digest: result, schema: Compute.RESULT, mediaType: "application/json" },
+      transformation: Compute.TRANSFORMATION,
+    })
+    const forged = Receipt.program(run.lib.store, reader, "receipt", {
+      at: { started: "2026-11-15T10:00:00Z", ended: "2026-11-15T10:00:01Z" },
+      step: {
+        kind: "script",
+        script: { digest: stored, schema: Compute.SCRIPT },
+        engine: Compute.ENGINE,
+        clock: "2026-11-15T10:00:00Z",
+        seed: "none",
+        calls: [],
+        result: { digest: result, schema: Compute.RESULT },
+      },
+      written: [ResearchRecord.refOf(artifact)],
+      skills: [],
+      lenses: [],
+      outcome: { status: "ok" },
+    })
+    run.lib.store.commit({ revisions: [artifact, forged] })
+    const claimed = Evidence.claim(run.lib.store, run.reader(), {
+      text: "Union density fell by 99 percent.",
+      evidence: [{ computation: artifact.objectId, role: "supports" }],
+    })
+    expect(answer(run.lib, run.started.run, claimed.claim).markdown).toContain("Tier: **unsupported**")
+    expect(Evidence.check(run.lib.store, run.started.run).replay.entries).toContainEqual(
+      expect.objectContaining({ step: "script research.compute", status: "mismatch" }),
+    )
   })
 })
 

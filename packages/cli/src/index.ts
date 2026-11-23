@@ -69,6 +69,9 @@ const Handlers = Runtime.handlers(Commands, {
     replay: () => import("./commands/handlers/research/replay"),
     show: () => import("./commands/handlers/research/show"),
     run: () => import("./commands/handlers/research/run"),
+    add: () => import("./commands/handlers/research/add"),
+    adopt: () => import("./commands/handlers/research/adopt"),
+    reject: () => import("./commands/handlers/research/reject"),
   },
   debug: {
     agents: () => import("./commands/handlers/debug/agents"),
