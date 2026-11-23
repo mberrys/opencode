@@ -82,7 +82,7 @@ describe("replaying a record's receipts", () => {
     expect(Replay.run(store, { rerun: () => undefined })).toMatchObject({ ok: false, unverifiable: 1 })
   })
 
-  test("stored steps are answered from their files, and a script cannot replay yet", () => {
+  test("stored steps are answered from their files, and a script with no engine or no result is unverifiable", () => {
     const store = recorded(
       receipt("stored", tool("stored")),
       receipt("model", {
@@ -107,8 +107,28 @@ describe("replaying a record's receipts", () => {
       ["tool library.find", "match"],
       ["model anthropic/claude", "match"],
       ["command adopt", "match"],
-      ["script", "unverifiable"],
+      ["script codemode", "unverifiable"],
     ])
+  })
+
+  test("a script runs again in its engine and matches its result by digest", () => {
+    const step = {
+      kind: "script",
+      script: blob(QUERY),
+      engine: { id: "echo", version: "1" },
+      clock: "2026-11-15T10:00:00Z",
+      seed: "1",
+      calls: [],
+      result: blob(RESULTS),
+    }
+    const store = recorded(receipt("script", step))
+    // A stand-in engine that answers the stored query with the stored results.
+    const engine = (ran: Replay.ScriptStep, script: Uint8Array) =>
+      ran.engine.id === "echo" && new TextDecoder().decode(script) === '{"query":"union density"}' ? RESULTS : undefined
+    expect(statuses(Replay.run(store, { script: engine }))).toEqual([["script echo", "match"]])
+    expect(Replay.run(store, { script: () => encoder.encode("{}") })).toMatchObject({ ok: false, mismatches: 1 })
+    expect(Replay.run(store, { script: () => undefined })).toMatchObject({ ok: false, unverifiable: 1 })
+    expect(Replay.run(store)).toMatchObject({ ok: false, unverifiable: 1 })
   })
 
   test("a stored file that was damaged after the commit is a mismatch", () => {
