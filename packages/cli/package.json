@@ -32,7 +32,7 @@
     "@effect/platform-node": "catalog:",
     "@opencode/client": "workspace:*",
     "@opencode/plugin": "workspace:*",
-    "@opencode/pty": "0.5.2",
+    "@opencode/pty": "0.6.0",
     "@opencode/research-library": "workspace:*",
     "@opencode/research-record": "workspace:*",
     "@opencode/research-store": "workspace:*",

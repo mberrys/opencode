@@ -116,6 +116,7 @@ describe("research tools", () => {
       expect(research.map((tool) => `${tool.options?.namespace}.${tool.name}`).toSorted()).toEqual([
         "evidence.check",
         "evidence.claim",
+        "evidence.compute",
         "evidence.gap",
         "evidence.quote",
         "library.add",
