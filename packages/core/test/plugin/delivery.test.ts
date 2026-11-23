@@ -1,5 +1,7 @@
 import { describe, expect } from "bun:test"
-import { Effect, Exit, Option, Queue, Schema, Stream } from "effect"
+import { DateTime, Effect, Exit, Option, Queue, Schema, Stream } from "effect"
+import type { CommandDefinition } from "@opencode/plugin/effect/command"
+import type { PromptInput } from "@opencode/schema/prompt-input"
 import { TestClock } from "effect/testing"
 import type { RpcHandlers } from "@opencode/plugin/effect/rpc"
 import type { SessionIdle, SessionIdleBackground } from "@opencode/plugin/effect/session"
@@ -82,6 +84,8 @@ const run = Effect.fnUntraced(function* (
     yields?: boolean
     // Runs while a message is being sent, before it is recorded. A failure means the message was not sent.
     sending?: () => Effect.Effect<void, unknown>
+    // The Session's title; undefined is a Session still named by its fallback.
+    title?: string
   } = {},
 ) {
   const stored = new Map<string, Schema.Json>(seed ? [[`session:${sessionID}`, seed]] : [])
@@ -89,6 +93,9 @@ const run = Effect.fnUntraced(function* (
   const sent: Sent[] = []
   const handlers: Partial<RpcHandlers<typeof Delivery.Definition>> = {}
   const tools = new Map<string, Tool.Info>()
+  const commands = new Map<string, CommandDefinition>()
+  const prompted: unknown[] = []
+  const titled: string[] = []
   const hooks = new Map<string, (event: SessionIdle) => Effect.Effect<void>>()
   const events = yield* Queue.unbounded<Watched>()
   yield* DeliveryPlugin.Plugin.effect(
@@ -100,13 +107,28 @@ const run = Effect.fnUntraced(function* (
         context: () => Effect.sync(() => options.context?.() ?? []) as never,
         synthetic: (input) =>
           (options.sending?.() ?? Effect.void).pipe(Effect.andThen(Effect.sync(() => void sent.push(input)))) as never,
-        // SAFETY: the startup sweep only checks that the Session exists.
+        // SAFETY: the startup sweep checks that the Session exists, and /deliver reads its title.
         get: (input) =>
           options.missing
             ? Effect.fail(new Session.NotFoundError({ sessionID: input.sessionID }))
             : options.unavailable
               ? Effect.fail(new Error("the database is busy"))
-              : (Effect.succeed({ id: input.sessionID }) as never),
+              : (Effect.succeed({
+                  id: input.sessionID,
+                  title: options.title,
+                  time: { created: DateTime.makeUnsafe(0) },
+                }) as never),
+        update: (input) => Effect.sync(() => void titled.push(input.title ?? "")) as never,
+        prompt: (input) => Effect.sync(() => void prompted.push(input)) as never,
+      },
+      command: {
+        // SAFETY: the plugin only adds commands.
+        transform: (callback) =>
+          Effect.sync(() =>
+            callback({ add: (command: CommandDefinition) => void commands.set(command.name, command) }),
+          ) as never,
+        list: () => Effect.die("unused command.list"),
+        reload: () => Effect.die("unused command.reload"),
       },
       tool: {
         // SAFETY: the plugin only declares its namespace and adds tools.
@@ -160,6 +182,14 @@ const run = Effect.fnUntraced(function* (
     replace: (delivery: Delivery.State) => void stored.set(`session:${sessionID}`, delivery),
     changed,
     sent,
+    prompted,
+    titled,
+    deliver: (text: string, attachments: Omit<PromptInput.Prompt, "text"> = {}) =>
+      Effect.suspend(
+        () =>
+          commands.get("deliver")?.execute({ sessionID, prompt: { text, ...attachments }, delivery: "steer" }) ??
+          Effect.die("the delivery plugin has no deliver command"),
+      ).pipe(Effect.tap(() => settle)),
     get: () => handler("get")({ sessionID }, call),
     stop: () => handler("stop")({ sessionID }, call).pipe(Effect.tap(() => settle)),
     extend: (by: number) => handler("extend")({ sessionID, by }, call).pipe(Effect.tap(() => settle)),
@@ -864,6 +894,126 @@ describe("delivery tools", () => {
       expect(message(yield* Effect.exit(plugin.tool("status", {})))).toBe(
         "This session has no live delivery. The user starts one with /deliver.",
       )
+    }),
+  )
+})
+
+describe("/deliver", () => {
+  it.effect("starts a delivery with the given budget, names the Session and sends the kickoff", () =>
+    Effect.gen(function* () {
+      const plugin = yield* run()
+      yield* TestClock.adjust(minute)
+
+      yield* plugin.deliver("2h A <pendulum> experiment")
+
+      const started = plugin.delivery()
+      expect(started).toMatchObject({
+        objective: "A <pendulum> experiment",
+        status: "active",
+        startedAt: minute,
+        deadline: minute + 120 * minute,
+        versions: [],
+        boot: DeliveryPlugin.boot(),
+      })
+      expect(plugin.titled).toEqual(["A <pendulum> experiment"])
+      expect(plugin.sent).toMatchObject([
+        {
+          sessionID,
+          description: "Live delivery: A <pendulum> experiment",
+          metadata: { source: "delivery", deliveryID: started?.id },
+          delivery: "steer",
+        },
+      ])
+      expect(plugin.sent[0]?.text).toContain("with a budget of 120 minutes")
+      expect(plugin.sent[0]?.text).toContain(
+        "<untrusted_objective>\nA &lt;pendulum&gt; experiment\n</untrusted_objective>",
+      )
+    }),
+  )
+
+  it.effect("defaults the budget, keeps a bare number in the objective, and keeps a title the user set", () =>
+    Effect.gen(function* () {
+      const plugin = yield* run(undefined, { title: "Landing pages" })
+
+      yield* plugin.deliver("3 landing pages")
+
+      expect(plugin.delivery()).toMatchObject({
+        objective: "3 landing pages",
+        deadline: DeliveryPlugin.DEFAULT_BUDGET,
+      })
+      expect(plugin.titled).toEqual([])
+    }),
+  )
+
+  it.effect("arms the deadline of the delivery it starts", () =>
+    Effect.gen(function* () {
+      const plugin = yield* run()
+      yield* plugin.deliver("1h30 A pendulum experiment")
+
+      yield* plugin.advance(90 * minute)
+
+      expect(plugin.delivery()).toMatchObject({ status: "stopping", stoppedBy: "budget" })
+    }),
+  )
+
+  it.effect("sends a kickoff with attachments as the user's prompt, which is not feedback", () =>
+    Effect.gen(function* () {
+      const plugin = yield* run()
+      const files = [{ url: "file:///spec.md", mime: "text/markdown" }] as unknown as PromptInput.Prompt["files"]
+
+      yield* plugin.deliver("A pendulum experiment", { files })
+
+      const started = plugin.delivery()
+      expect(plugin.sent).toEqual([])
+      expect(plugin.prompted).toMatchObject([{ files, metadata: { source: "delivery", deliveryID: started?.id } }])
+      yield* TestClock.adjust(1)
+      yield* plugin.emit({
+        type: "session.inbox.enqueued",
+        created: 1,
+        data: {
+          sessionID,
+          inboxID: "msg_kickoff",
+          item: { type: "user", payload: { text: "kickoff", metadata: { source: "delivery" } }, delivery: "steer" },
+        },
+      })
+      expect(plugin.delivery()?.feedback).toBeUndefined()
+    }),
+  )
+
+  it.effect("refuses to start a second delivery, but replaces one that is done", () =>
+    Effect.gen(function* () {
+      const busy = yield* run(active)
+      expect(Exit.isFailure(yield* Effect.exit(busy.deliver("Another objective")))).toBe(true)
+      expect(busy.delivery()).toEqual(active)
+
+      const finished = yield* run({ ...active, status: "done" })
+      yield* finished.deliver("Another objective")
+      expect(finished.delivery()).toMatchObject({ objective: "Another objective", status: "active" })
+    }),
+  )
+
+  it.effect("stops and extends the delivery through its subcommands", () =>
+    Effect.gen(function* () {
+      const plugin = yield* run(active)
+
+      yield* plugin.deliver("extend 30m")
+      expect(plugin.delivery()?.deadline).toBe(42 * minute)
+
+      yield* plugin.deliver("stop")
+      expect(plugin.delivery()).toMatchObject({ status: "stopping", stoppedBy: "user", wrapUpSent: true })
+    }),
+  )
+
+  it.effect("explains its usage instead of starting a delivery without an objective or a valid extension", () =>
+    Effect.gen(function* () {
+      const plugin = yield* run(active)
+      const failure = (exit: Exit.Exit<unknown, unknown>) =>
+        Exit.isFailure(exit) ? String(Option.getOrUndefined(Exit.findErrorOption(exit))) : undefined
+
+      expect(failure(yield* Effect.exit(plugin.deliver("")))).toContain("Objective: Build a pendulum experiment")
+      expect(failure(yield* Effect.exit(plugin.deliver("extend soon")))).toContain("Extend by a time such as 30m")
+      expect(failure(yield* Effect.exit(plugin.deliver("stop")))).toBeUndefined()
+      expect(failure(yield* Effect.exit((yield* run()).deliver("2h")))).toContain("Usage: /deliver")
     }),
   )
 })
