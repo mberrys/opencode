@@ -340,6 +340,18 @@ describe("delivery plugin", () => {
     }),
   )
 
+  it.effect("drops a delivery that has not been active for the retention period when the plugin starts", () =>
+    Effect.gen(function* () {
+      yield* TestClock.adjust(DeliveryPlugin.RETAIN)
+      const done: Delivery.State = { ...active, status: "done", summary: "Shipped" }
+      const paused: Delivery.State = { ...active, status: "stopping", stoppedBy: "restart" }
+
+      expect((yield* run({ ...done, updatedAt: 1 })).delivery()).toEqual({ ...done, updatedAt: 1 })
+      expect((yield* run(done)).delivery()).toBeUndefined()
+      expect((yield* run(paused)).delivery()).toBeUndefined()
+    }),
+  )
+
   it.effect("drops the delivery of a Session deleted while the plugin was not running", () =>
     Effect.gen(function* () {
       expect((yield* run(active, { missing: true })).delivery()).toBeUndefined()

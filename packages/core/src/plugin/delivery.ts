@@ -18,6 +18,8 @@ const decodeState = Schema.decodeUnknownOption(Delivery.State)
 // Storage key prefix of a Session's delivery. Plugin storage is the plugin's own, so children and forks start without one.
 const PREFIX = "session:"
 const MINUTE = 60 * 1000
+/** How long a delivery that is no longer active stays readable before startup drops it. */
+export const RETAIN = 30 * 24 * 60 * MINUTE
 // How much of each feedback message the delivery keeps, and how much the status tool repeats back to the model.
 const FEEDBACK_TEXT = 2_000
 const FEEDBACK_PREVIEW = 300
@@ -404,7 +406,8 @@ export const Plugin = define({
 
     // A delivery an earlier process left active has no timer and nothing driving it, so stop those now; the boot check
     // in the hook covers any that wake first. This process's own active deliveries get their timers back. Deliveries
-    // of Sessions deleted while no instance listened are dropped; one whose Session cannot be looked up is kept.
+    // of Sessions deleted while no instance listened are dropped; one whose Session cannot be looked up is kept. One
+    // that has not been active for `RETAIN` is dropped too, so finished deliveries do not pile up in storage.
     // This assumes one server process per database, as the goal plugin does.
     yield* Effect.gen(function* () {
       let after: string | undefined
@@ -421,6 +424,10 @@ export const Plugin = define({
               )
               if (!exists) return yield* drop(sessionID)
               const delivery = Option.getOrUndefined(decodeState(entry.value))
+              if (delivery && delivery.status !== "active") {
+                if ((yield* Clock.currentTimeMillis) - delivery.updatedAt >= RETAIN) yield* drop(sessionID)
+                return
+              }
               if (delivery?.status !== "active") return
               // This process's own deliveries outlive a plugin reload, which drops their timers.
               if (delivery.boot === boot()) return yield* schedule(sessionID, delivery)
