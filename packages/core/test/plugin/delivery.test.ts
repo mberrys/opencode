@@ -10,6 +10,7 @@ import { Delivery } from "@opencode/schema/delivery"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { Tool } from "@opencode/schema/tool"
 import { DeliveryPlugin } from "@opencode/core/plugin/delivery"
+import { execute } from "@opencode/core/tool/runtime"
 import { Session } from "@opencode/core/session"
 import { it } from "../lib/effect"
 import { host } from "./host"
@@ -198,7 +199,14 @@ const run = Effect.fnUntraced(function* (
     tool: (name: string, input: unknown) =>
       Effect.suspend(() => {
         const tool = tools.get(name)
-        return tool ? tool.execute(input, toolContext) : Effect.die(`the delivery plugin has no ${name} tool`)
+        // Through the tool runtime, which enforces each tool's declared input and output, as a real call does.
+        if (!tool) return Effect.die(`the delivery plugin has no ${name} tool`)
+        return execute(tool, input, toolContext).pipe(
+          Effect.map((result) => ({
+            output: result.output,
+            content: result.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n"),
+          })),
+        )
       }),
     emit: (event: Watched) => Queue.offer(events, event).pipe(Effect.andThen(settle)),
     advance: (ms: number) => TestClock.adjust(ms).pipe(Effect.andThen(settle)),
