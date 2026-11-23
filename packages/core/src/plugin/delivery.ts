@@ -7,7 +7,10 @@ import { Session } from "@opencode/schema/session"
 import { Tool } from "@opencode/schema/tool"
 import { Cause, Clock, Duration, Effect, FiberMap, Option, Predicate, Schema, Semaphore, Stream } from "effect"
 
-/** Continuations in a row without a tool call after which the delivery stops instead of looping until its deadline. */
+/**
+ * Continuations in a row without progress, a tool call other than delivery_status, after which the delivery stops instead
+ * of looping until its deadline.
+ */
 export const MAX_STALLS = 3
 
 type State = Delivery.State
@@ -18,6 +21,8 @@ const MINUTE = 60 * 1000
 // How much of each feedback message the delivery keeps, and how much the status tool repeats back to the model.
 const FEEDBACK_TEXT = 2_000
 const FEEDBACK_PREVIEW = 300
+// The status tool's effective name: tools in a namespace are named `<namespace>_<name>`.
+const STATUS_TOOL = "delivery_status"
 // Identifies this server process. A delivery started by an earlier process stops instead of resuming on its own.
 // Created on first use: Workers forbid random values while a module loads.
 let processBoot: string | undefined
@@ -251,8 +256,9 @@ export const Plugin = define({
       )
     })
 
-    // Whether the agent called any tool since the delivery's last message to it. Without that message in view, for
-    // example after a compaction, the round counts as progress.
+    // Whether the agent called any tool since the delivery's last message to it. Reading the delivery's status is not
+    // progress, so an agent that only calls delivery_status still stalls. Without that message in view, for example
+    // after a compaction, the round counts as progress.
     const usedTools = Effect.fn("DeliveryPlugin.usedTools")(function* (sessionID: Session.ID, deliveryID: string) {
       const messages = yield* ctx.session.context({ sessionID })
       const start = messages.findLastIndex(
@@ -263,7 +269,11 @@ export const Plugin = define({
         start === -1 ||
         messages
           .slice(start + 1)
-          .some((message) => message.type === "assistant" && message.content.some((part) => part.type === "tool"))
+          .some(
+            (message) =>
+              message.type === "assistant" &&
+              message.content.some((part) => part.type === "tool" && part.name !== STATUS_TOOL),
+          )
       )
     })
 
@@ -303,7 +313,7 @@ export const Plugin = define({
           sessionID,
           delivery,
           "stalled",
-          `The agent called no tool in ${MAX_STALLS} continuations in a row`,
+          `The agent made no progress in ${MAX_STALLS} continuations in a row`,
           false,
         )
       const next = yield* replace(sessionID, delivery, (current) => ({ ...current, stalls }))

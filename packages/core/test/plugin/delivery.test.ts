@@ -38,7 +38,11 @@ const cancelled = (id: string): Watched => ({ type: "session.inbox.cancelled", d
 
 // SAFETY: the plugin reads only the type, metadata and tool parts of context messages.
 const deliveryMessage = { type: "synthetic", metadata: { deliveryID: active.id } } as unknown as SessionMessage.Info
-const toolCall = { type: "assistant", content: [{ type: "tool" }] } as unknown as SessionMessage.Info
+const toolCall = { type: "assistant", content: [{ type: "tool", name: "bash" }] } as unknown as SessionMessage.Info
+const statusCall = {
+  type: "assistant",
+  content: [{ type: "tool", name: "delivery_status" }],
+} as unknown as SessionMessage.Info
 const reply = { type: "assistant", content: [{ type: "text" }] } as unknown as SessionMessage.Info
 
 // SAFETY: the plugin only passes the error factory's result to Effect.fail; tests read its type.
@@ -451,11 +455,21 @@ describe("delivery idle hook", () => {
       expect(stalled.delivery()).toMatchObject({
         status: "stopping",
         stoppedBy: "stalled",
-        reason: `The agent called no tool in ${DeliveryPlugin.MAX_STALLS} continuations in a row`,
+        reason: `The agent made no progress in ${DeliveryPlugin.MAX_STALLS} continuations in a row`,
         wrapUpSent: true,
       })
       expect(stalled.sent).toMatchObject([{ text: expect.stringContaining("The live delivery is wrapping up") }])
       expect(stalled.sent[0]?.resume).toBeUndefined()
+    }),
+  )
+
+  it.effect("counts a continuation that only read delivery_status as a stall", () =>
+    Effect.gen(function* () {
+      const plugin = yield* run({ ...active, stalls: 1 }, { context: () => [deliveryMessage, statusCall, reply] })
+
+      yield* plugin.idle()
+
+      expect(plugin.delivery()?.stalls).toBe(2)
     }),
   )
 
