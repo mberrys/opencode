@@ -13,6 +13,16 @@ const refusal = (run: () => unknown) => {
   }
   return "ok"
 }
+/** The code and message of a refusal, so two ways of building a graph can be compared error for error. */
+const outcome = (run: () => unknown) => {
+  try {
+    run()
+  } catch (error) {
+    if (error instanceof ContractError) return `${error.code}: ${error.message}`
+    throw error
+  }
+  return "ok"
+}
 const named = (name: string) => file.revisions.find((entry) => entry.name === name)!.revision
 const preimage = (name: string) => {
   const { revisionId: _, ...rest } = named(name)
@@ -187,7 +197,20 @@ describe("the graph refuses", () => {
         ? { seq: seq ?? entry.seq, revision: ResearchRecord.create(input) }
         : entry,
     )
-  const build = (list: typeof entries) => refusal(() => Graph.make(file.projectId, list))
+  // Every refusal here is also checked through `extend`: adding the later commits to a graph already built from the
+  // earlier ones refuses with the same error as building the whole list, at every commit where the earlier part holds.
+  const build = (list: typeof entries) => {
+    const whole = outcome(() => Graph.make(file.projectId, list))
+    const extended = [...new Set(list.map((entry) => entry.seq))].flatMap((seq) => {
+      const before = list.filter((entry) => entry.seq < seq)
+      if (outcome(() => Graph.make(file.projectId, before)) !== "ok") return []
+      const graph = Graph.make(file.projectId, before)
+      return [outcome(() => Graph.extend(graph, list.filter((entry) => entry.seq >= seq)))]
+    })
+    expect(extended.length).toBeGreaterThan(0)
+    expect(extended).toEqual(extended.map(() => whole))
+    return refusal(() => Graph.make(file.projectId, list))
+  }
 
   test("the vector project as it is", () => {
     expect(build(entries)).toBe("ok")
@@ -256,5 +279,51 @@ describe("the graph refuses", () => {
     expect(
       build(replacing("snapshot", withBody("snapshot", { members: { ...snapshot.members, closureCount: 1 } }))),
     ).toBe("invalid-record")
+  })
+})
+
+describe("extending a graph", () => {
+  const entries = file.revisions.map((entry) => ({ seq: entry.seq, revision: ResearchRecord.parse(entry.revision) }))
+  const whole = Graph.make(file.projectId, entries)
+  const lastSeq = whole.lastSeq
+
+  test.each(Array.from({ length: lastSeq + 1 }, (_, seq) => seq))("after commit %i is the graph built whole", (seq) => {
+    const before = Graph.make(
+      file.projectId,
+      entries.filter((entry) => entry.seq <= seq),
+    )
+    const extended = Graph.extend(
+      before,
+      entries.filter((entry) => entry.seq > seq),
+    )
+    expect(extended.entries).toEqual(whole.entries)
+    expect(extended.lastSeq).toBe(lastSeq)
+    expect(extended.heads(lastSeq)).toEqual(whole.heads(lastSeq))
+    entries.forEach((entry) => expect(extended.entry(ResearchRecord.refOf(entry.revision))).toBe(entry))
+  })
+
+  test("leaves the graph it extends as it was", () => {
+    const before = Graph.make(
+      file.projectId,
+      entries.filter((entry) => entry.seq < lastSeq),
+    )
+    const added = entries.filter((entry) => entry.seq === lastSeq)
+    const length = before.entries.length
+    Graph.extend(before, added)
+    expect(before.entries.length).toBe(length)
+    expect(before.lastSeq).toBe(lastSeq - 1)
+    expect(refusal(() => before.entry(ResearchRecord.refOf(added[0].revision)))).toBe("dangling-ref")
+    expect(refusal(() => Graph.extend(before, added))).toBe("ok")
+  })
+
+  test("adding to a commit it already holds checks the whole history again", () => {
+    const before = Graph.make(
+      file.projectId,
+      entries.filter((entry) => entry.seq < lastSeq),
+    )
+    const late = entries.filter((entry) => entry.seq === lastSeq).map((entry) => ({ ...entry, seq: lastSeq - 1 }))
+    expect(outcome(() => Graph.extend(before, late))).toBe(
+      outcome(() => Graph.make(file.projectId, [...before.entries, ...late])),
+    )
   })
 })

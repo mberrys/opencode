@@ -112,7 +112,7 @@ export function openReadOnly(directory: string, options: { readonly busyTimeoutM
   return read(opened.db, layout, opened.projectId).reader
 }
 
-/** Every revision the record holds, parsed once and kept until another writer moves the head. */
+/** Every revision the record holds, parsed once; another writer's commits are added as they are read. */
 interface Cache {
   head: Head | undefined
   graph: Graph.Graph | undefined
@@ -244,6 +244,9 @@ function commit(
     if (bytes === undefined) return
     Fragment.verify({ representationDigest: digest as Canonical.Digest, selector: revision.body.selector, bytes })
   })
+  const rows = revisions.map((revision) => Canonical.json(revision))
+  const listed = Canonical.json(ids)
+  catchUp(db, projectId, cache)
 
   const outcome = Tables.busy(() =>
     db
@@ -258,12 +261,12 @@ function commit(
             throw new StoreError("blob-missing", `the blob ${digest} disappeared before the commit`)
         })
         const added = revisions.map((revision) => ({ seq, revision }))
-        const next = Graph.make(projectId, [...current.graph.entries, ...added])
+        const next = Graph.extend(current.graph, added)
         const insertRevision = db.query(
           "INSERT INTO revisions(revision_id, seq, object_id, kind, json) VALUES (?, ?, ?, ?, ?)",
         )
-        revisions.forEach((revision) =>
-          insertRevision.run(revision.revisionId, seq, revision.objectId, revision.kind, Canonical.json(revision)),
+        revisions.forEach((revision, index) =>
+          insertRevision.run(revision.revisionId, seq, revision.objectId, revision.kind, rows[index]),
         )
         const insertRef = db.query("INSERT INTO blob_refs(digest, seq) VALUES (?, ?)")
         required.forEach((digest) => insertRef.run(digest, seq))
@@ -275,7 +278,7 @@ function commit(
           digest,
           key,
           digestOfRequest,
-          Canonical.json(ids),
+          listed,
         )
         Failpoint.hit("beforeDbCommit")
         return { committed: { seq, digest, revisions: refs, replayed: false }, graph: next }
@@ -314,18 +317,37 @@ function replayOf(db: Database, key: string | null, ids: readonly string[], refs
   return undefined
 }
 
-/** Reloads the parsed revisions when another writer has moved the head since they were read. */
+/**
+ * Reads other writers' commits before the write lock is taken, so a commit reads under the lock only the commits that
+ * land meanwhile. It is only a head start: the commit decides under the lock, where a replay is still answered first
+ * and a damaged record still refuses the commit, so a failure here is left for that second read to meet.
+ */
+function catchUp(db: Database, projectId: string, cache: Cache) {
+  try {
+    db.transaction(() => refresh(db, projectId, cache)).deferred()
+  } catch {}
+}
+
+/**
+ * Brings the parsed revisions up to the stored head. A cache whose head is still in the chain reads only the commits
+ * after it and checks just their revisions; any other cache is reloaded and checked whole.
+ */
 function refresh(db: Database, projectId: string, cache: Cache): { graph: Graph.Graph; head: Head | undefined } {
   const head = headOf(db)
   if (cache.graph !== undefined && cache.head?.seq === head?.seq && cache.head?.digest === head?.digest)
     return { graph: cache.graph, head }
-  const entries = db
-    .query<{ seq: number; json: string }, []>("SELECT seq, json FROM revisions ORDER BY seq, rowid")
-    .all()
-    .map((row) => ({ seq: row.seq, revision: stored(row.json) }))
+  const since = cache.graph === undefined ? undefined : committedSince(db, cache.head, head)
+  const entries =
+    since ??
+    db
+      .query<{ seq: number; json: string }, []>("SELECT seq, json FROM revisions ORDER BY seq, rowid")
+      .all()
+      .map((row) => ({ seq: row.seq, revision: stored(row.json) }))
   const graph = (() => {
     try {
-      return Graph.make(projectId, entries)
+      return cache.graph !== undefined && since !== undefined
+        ? Graph.extend(cache.graph, since)
+        : Graph.make(projectId, entries)
     } catch (error) {
       throw new StoreError("store-corrupt", `the stored revisions break the contract; run verify: ${messageOf(error)}`)
     }
@@ -333,6 +355,35 @@ function refresh(db: Database, projectId: string, cache: Cache): { graph: Graph.
   cache.head = head
   cache.graph = graph
   return { graph, head }
+}
+
+/**
+ * The revisions of the commits after `cached`, in the order a full read returns them: by commit, then as the commit
+ * listed them, which is the order it wrote them in. `undefined` when they cannot be read that way: the cached head is
+ * no longer in the chain (the record was replaced or cut back), or a commit's list does not match its revisions.
+ */
+function committedSince(db: Database, cached: Head | undefined, head: Head | undefined) {
+  const after = cached?.seq ?? 0
+  if (head === undefined || head.seq < after) return undefined
+  if (
+    cached !== undefined &&
+    db.query<{ digest: string }, [number]>("SELECT digest FROM commits WHERE seq = ?").get(cached.seq)?.digest !==
+      cached.digest
+  )
+    return undefined
+  const rows = db
+    .query<{ seq: number; stored: number | null; json: string | null }, [number]>(
+      `SELECT c.seq AS seq, r.seq AS stored, r.json AS json
+       FROM commits c
+       JOIN json_each(CASE WHEN json_valid(c.revisions) THEN c.revisions ELSE '[]' END) j
+       LEFT JOIN revisions r ON r.revision_id = j.value
+       WHERE c.seq > ?
+       ORDER BY c.seq, j.key`,
+    )
+    .all(after)
+  if (new Set(rows.map((row) => row.seq)).size !== head.seq - after) return undefined
+  if (rows.some((row) => row.stored !== row.seq)) return undefined
+  return rows.map((row) => ({ seq: row.seq, revision: stored(row.json!) }))
 }
 
 /** A stored revision. One that no longer parses is damage to the record, never the caller's fault. */

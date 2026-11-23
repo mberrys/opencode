@@ -30,10 +30,41 @@ export interface Graph {
 
 export function make(projectId: string, input: readonly Entry[]): Graph {
   Ref.parse({ projectId, objectId: "project", revisionId: "project" })
-  const entries = [...input].sort((a, b) => a.seq - b.seq)
-  const byRef = new Map<string, Entry>()
-  const heads = new Map<string, Entry>()
-  entries.forEach((entry) => {
+  return build(projectId, [], new Map(), new Map(), [...input].sort((a, b) => a.seq - b.seq))
+}
+
+/**
+ * The graph `make` builds from `graph`'s entries and `added`, refused for exactly the same inputs, without checking
+ * `graph`'s entries again. That holds because each entry's checks read only exact refs, which keep resolving to the
+ * same entries, and history fenced at or before the entry's own commit, which later commits leave as it was. So when
+ * every added entry is in a commit after `graph.lastSeq`, the old entries pass as they did and only the added ones are
+ * checked; otherwise it builds the graph again with `make`. `graph` itself is left as it was.
+ */
+export function extend(graph: Graph, added: readonly Entry[]): Graph {
+  const state = states.get(graph)
+  if (state === undefined || !added.every((entry) => entry.seq > graph.lastSeq))
+    return make(graph.projectId, [...graph.entries, ...added])
+  return build(
+    graph.projectId,
+    graph.entries,
+    new Map(state.byRef),
+    new Map(state.heads),
+    [...added].sort((a, b) => a.seq - b.seq),
+  )
+}
+
+/** The lookups behind a graph, kept so `extend` can add to them without checking its entries again. */
+const states = new WeakMap<Graph, { byRef: Map<string, Entry>; heads: Map<string, Entry> }>()
+
+/** Checks `added`, already sorted and after every entry of `prior`, against `prior`, whose lookups are given. */
+function build(
+  projectId: string,
+  prior: readonly Entry[],
+  byRef: Map<string, Entry>,
+  heads: Map<string, Entry>,
+  added: readonly Entry[],
+): Graph {
+  added.forEach((entry) => {
     if (!Number.isSafeInteger(entry.seq) || entry.seq < 1) history("a commit sequence is a safe integer >= 1")
     const ref = Ref.parse(ResearchRecord.refOf(entry.revision), projectId)
     const key = Ref.key(ref)
@@ -53,6 +84,7 @@ export function make(projectId: string, input: readonly Entry[]): Graph {
     heads.set(ref.objectId, entry)
   })
 
+  const entries = [...prior, ...added]
   const resolve = (ref: Ref.Exact, kinds: readonly ResearchRecord.Kind[] = []) => {
     const found = byRef.get(Ref.key(Ref.parse(ref, projectId)))
     if (found === undefined) throw new ContractError("dangling-ref", `${Ref.key(ref)} is not retained`)
@@ -79,12 +111,13 @@ export function make(projectId: string, input: readonly Entry[]): Graph {
     },
   }
 
-  entries.forEach((entry) => {
+  added.forEach((entry) => {
     ResearchRecord.refs(entry.revision).forEach((dependency) => {
       if (resolve(dependency.ref, dependency.kinds).seq > entry.seq) history("a ref cannot point at a later commit")
     })
     check(graph, entry)
   })
+  states.set(graph, { byRef, heads })
   return graph
 }
 
