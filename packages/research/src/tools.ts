@@ -84,7 +84,7 @@ export function install(ctx: Pick<Context, "tool" | "permission" | "session" | "
     editor.namespace({
       name: "evidence",
       description:
-        "The record: cut quotes, write claims and record gaps. A claim is refused unless this session cut the quote it cites.",
+        "The record: cut quotes, run computations, write claims and record gaps. A claim is refused unless this session cut the quote or ran the computation it cites.",
     })
     editor.namespace({
       name: "research",
@@ -306,15 +306,37 @@ export function install(ctx: Pick<Context, "tool" | "permission" | "session" | "
     })
 
     editor.add({
+      name: "compute",
+      description:
+        "Compute a number from named inputs: + - * / ^, parentheses, min, max, abs, sqrt, round. The script and its result are recorded so replay can rerun it. Name the fragments the inputs came from. Returns the computation id a claim cites.",
+      options: { namespace: "evidence", permission: "evidence" },
+      input: Schema.Struct({
+        expression: Schema.String.annotate({ description: "Such as (before - after) / before * 100" }),
+        inputs: Schema.Record(Schema.String, Schema.Number).annotate({
+          description: "Each name in the expression with its number, such as { before: 35, after: 11 }",
+        }),
+        fragments: Schema.optional(
+          Schema.Array(Schema.String).annotate({ description: "Fragment ids this session cut that hold the inputs" }),
+        ),
+      }),
+      output: ComputeOutput,
+      execute: (input, tool) =>
+        run(tool, (call) => Evidence.compute(store(), call, input)).pipe(
+          Effect.map((result) => ({ output: result, content: `computation ${result.computation}\n${result.result}` })),
+        ),
+    })
+
+    editor.add({
       name: "claim",
       description:
-        "Write a claim in your own words, citing fragments this session cut, each with its role. Name the sub-question it answers.",
+        "Write a claim in your own words, citing fragments this session cut or computations it ran, each with its role. Name the sub-question it answers.",
       options: { namespace: "evidence", permission: "evidence" },
       input: Schema.Struct({
         text: Schema.String,
         evidence: Schema.Array(
           Schema.Struct({
-            fragment: Schema.String,
+            fragment: Schema.optional(Schema.String),
+            computation: Schema.optional(Schema.String),
             role: Schema.Literals(["supports", "challenges", "qualifies", "contextualizes"]),
           }),
         ),
@@ -508,7 +530,18 @@ const QuoteOutput = Schema.Struct({
   receipt: Schema.String,
 })
 
-const ClaimOutput = Schema.Struct({ claim: Schema.String, evidence: Schema.Array(Schema.String), receipt: Schema.String })
+const ComputeOutput = Schema.Struct({
+  computation: Schema.String,
+  result: Schema.String,
+  value: Schema.Number,
+  receipt: Schema.String,
+})
+
+const ClaimOutput = Schema.Struct({
+  claim: Schema.String,
+  evidence: Schema.Array(Schema.String),
+  receipt: Schema.String,
+})
 
 const GapOutput = Schema.Struct({ gap: Schema.String, receipt: Schema.String })
 

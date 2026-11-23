@@ -1,4 +1,5 @@
 export { Add } from "./add.js"
+export { Compute } from "./compute.js"
 export { Extract } from "./extract.js"
 export { Fetch } from "./fetch.js"
 export { Find } from "./find.js"
