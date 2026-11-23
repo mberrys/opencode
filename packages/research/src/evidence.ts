@@ -84,28 +84,45 @@ export function quote(
 
 /**
  * Runs a computation and records it: the script, its inputs and its result are stored, and the result is exactly what
- * the caller is shown. The inputs may name the fragments they were read from; an agent may name only fragments its own
- * session cut. A claim cites the computation by the returned id, and it counts as computed only while it replays.
+ * the caller is shown. Every input names the fragment it was read from, and that fragment's quote must contain the
+ * number, so a computation cannot rest on a number no source states; an agent may name only fragments its own session
+ * cut. A claim cites the computation by the returned id, and it counts as computed only while it replays.
  */
 export function compute(
   store: Store.Store,
   call: Call,
   input: {
     readonly expression: string
-    readonly inputs: Readonly<Record<string, number>>
-    readonly fragments?: readonly string[]
+    readonly inputs: Readonly<Record<string, { readonly value: number; readonly fragment: string }>>
   },
 ) {
   const graph = store.graph()
-  const from = (input.fragments ?? []).map((objectId) => ResearchRecord.refOf(head(graph, objectId, "fragment")))
-  if (call.context.initiator.voice === "agent")
-    from.forEach((fragment) => {
-      if (!cutIn(graph, call.context.session, fragment))
-        throw new Error(
-          `${fragment.objectId} was never shown to this session. Cut it with evidence_quote first, then compute.`,
-        )
-    })
-  const computed = Compute.record(store, call, { expression: input.expression, inputs: input.inputs, from })
+  const named = Object.entries(input.inputs).map(([name, item]) => ({
+    name,
+    value: item.value,
+    fragment: head(graph, item.fragment, "fragment"),
+  }))
+  named.forEach((item) => {
+    if (
+      call.context.initiator.voice === "agent" &&
+      !cutIn(graph, call.context.session, ResearchRecord.refOf(item.fragment))
+    )
+      throw new Error(
+        `${item.fragment.objectId} was never shown to this session. Cut it with evidence_quote first, then compute.`,
+      )
+    if (!numbersIn(item.fragment.body.selector.quote).includes(item.value))
+      throw new Error(
+        `${item.name} is ${item.value}, which fragment ${item.fragment.objectId} does not state. Quote the passage that states it, then compute.`,
+      )
+  })
+  const from = [
+    ...new Map(named.map((item) => [item.fragment.revisionId, ResearchRecord.refOf(item.fragment)])).values(),
+  ]
+  const computed = Compute.record(store, call, {
+    expression: input.expression,
+    inputs: Object.fromEntries(named.map((item) => [item.name, item.value])),
+    from,
+  })
   return {
     computation: computed.artifact.objectId,
     result: computed.result,
@@ -526,6 +543,11 @@ function cutIn(graph: Graph.Graph, session: string, fragment: Ref.Exact, asOfSeq
       entry.revision.body.step.tool === "evidence.quote" &&
       entry.revision.body.written.some((written) => Ref.equals(written, fragment)),
   )
+}
+
+/** The numbers a quote states, such as 35 in "35%" and 1234.5 in "1,234.5". */
+function numbersIn(quote: string) {
+  return (quote.match(/\d[\d,]*(?:\.\d+)?/g) ?? []).map((match) => Number(match.replaceAll(",", "")))
 }
 
 /** The script receipt that wrote a computation's artifact, or `undefined` when no script wrote it. */
