@@ -114,8 +114,12 @@ describe("the vector project as a graph", () => {
     // Before the fragment was re-placed on the newer text, its unresolved re-find marked it stale.
     expect(at("claim", {}, 9)).toEqual({ tier: "adopted", flags: ["agent-metadata", "stale"] })
     // The unattested adoption counts for nothing, and the open researcher challenge marks it contested.
-    expect(at("claim computed")).toEqual({ tier: "computed", flags: ["contested"] })
-    expect(at("claim computed", { replayed: () => false })).toEqual({ tier: "unsupported", flags: ["contested"] })
+    // The computation read its numbers from the fragment, so the fragment's source carries its flags to the claim.
+    expect(at("claim computed")).toEqual({ tier: "computed", flags: ["agent-metadata", "contested"] })
+    expect(at("claim computed", { replayed: () => false }).tier).toBe("unsupported")
+    // A computation counts only while the fragment it read verifies and was shown to its session.
+    expect(at("claim computed", { verified: () => false }).tier).toBe("unsupported")
+    expect(at("claim computed", { shown: () => false }).tier).toBe("unsupported")
     // Before the rulings: the checker's challenge is open, and nothing is adopted yet.
     expect(at("claim", {}, 7)).toEqual({ tier: "quoted", flags: ["agent-metadata", "contested"] })
     expect(at("claim", { shown: () => false }, 7).tier).toBe("unsupported")

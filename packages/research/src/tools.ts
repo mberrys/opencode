@@ -308,16 +308,20 @@ export function install(ctx: Pick<Context, "tool" | "permission" | "session" | "
     editor.add({
       name: "compute",
       description:
-        "Compute a number from named inputs: + - * / ^, parentheses, min, max, abs, sqrt, round. The script and its result are recorded so replay can rerun it. Name the fragments the inputs came from. Returns the computation id a claim cites.",
+        "Compute a number from named inputs: + - * / ^, parentheses, min, max, abs, sqrt, round. Each input names the fragment this session cut that states it, exactly as written there (35 for 35%). The script and its result are recorded so replay can rerun it. Returns the computation id a claim cites.",
       options: { namespace: "evidence", permission: "evidence" },
       input: Schema.Struct({
         expression: Schema.String.annotate({ description: "Such as (before - after) / before * 100" }),
-        inputs: Schema.Record(Schema.String, Schema.Number).annotate({
-          description: "Each name in the expression with its number, such as { before: 35, after: 11 }",
+        inputs: Schema.Record(
+          Schema.String,
+          Schema.Struct({
+            value: Schema.Number,
+            fragment: Schema.String.annotate({ description: "The id of the fragment that states this number" }),
+          }),
+        ).annotate({
+          description:
+            "Each name in the expression with its number and fragment, such as { before: { value: 35, fragment: <id> } }",
         }),
-        fragments: Schema.optional(
-          Schema.Array(Schema.String).annotate({ description: "Fragment ids this session cut that hold the inputs" }),
-        ),
       }),
       output: ComputeOutput,
       execute: (input, tool) =>

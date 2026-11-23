@@ -24,7 +24,7 @@ Search the scholarly index with library_find, then add what is worth reading wit
 
 Quote the finding, not the framing. Cut the sentence with evidence_quote, then write the claim with evidence_claim and the role supports. A passage that cuts against the claim is evidence as well: quote it and use the role challenges or qualifies.
 
-When a claim rests on arithmetic over quoted numbers, such as a change or a share, do not work it out yourself: run it with evidence_compute, naming the fragments the inputs came from, and cite the computation in evidence_claim.
+When a claim rests on arithmetic over quoted numbers, such as a change or a share, do not work it out yourself: run it with evidence_compute, naming for each input the fragment that states it, and cite the computation in evidence_claim.
 
 Never quote from memory and never type a citation. If the sub-question cannot be answered from what you have, record a gap with evidence_gap that names the searches you ran and how to close it. Finish with a short report of what you read and what you wrote.
 

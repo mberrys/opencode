@@ -156,12 +156,14 @@ Computed per claim revision from the graph at a sequence fence, plus facts the c
 
 Evidence counts unless a standing `challenge-ruling` upheld a challenge to that exact evidence revision; upheld rulings are found from the rulings, so revising the challenge cannot erase one. A corrected evidence revision starts unchallenged. A challenge, from a head judgment or a standing researcher decision, is open until ruled.
 
-| Tier          | When                                                                                                                 |
-| ------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `adopted`     | The standing `adoption` ruling for this claim object adopts this exact claim revision                                |
-| `computed`    | Otherwise, a counting `supports` evidence with a computation basis whose run replayed                                |
-| `quoted`      | Otherwise, a counting `supports` evidence whose every cited fragment verified and, when an agent wrote it, was shown |
-| `unsupported` | Otherwise                                                                                                            |
+| Tier          | When                                                                                                                                                                                                                                          |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `adopted`     | The standing `adoption` ruling for this claim object adopts this exact claim revision                                                                                                                                                         |
+| `computed`    | Otherwise, a counting `supports` evidence with a computation basis whose run replayed, and whose output artifact names at least one fragment among its `inputs`, every one of which verified and, when an agent wrote the evidence, was shown |
+| `quoted`      | Otherwise, a counting `supports` evidence whose every cited fragment verified and, when an agent wrote it, was shown                                                                                                                          |
+| `unsupported` | Otherwise                                                                                                                                                                                                                                     |
+
+A computation's inputs are numbers its author supplied, so the fragments its artifact names are what ground it: a computation over no fragment cannot outrank a quote. Its fragments count toward the flags below the same as cited ones.
 
 Flags qualify a tier and render wherever it does: `abstract-only`, `secondary`, `ocr`, `agent-metadata`, `contested` (an open challenge to any of the claim's evidence, or an upheld challenge to evidence an adoption read), `stale` (an unresolved re-find, until the fragment object is placed on that text; an ambiguous re-find is the researcher's to place, not stale), `rejected` (the standing adoption ruling rejects this exact claim revision). A corrected claim starts neither adopted nor rejected.
 

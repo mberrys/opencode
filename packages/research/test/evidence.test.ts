@@ -20,6 +20,8 @@ const PAPER = [
   "Union decline explains about a fifth of the rise in wage inequality. The rest comes from changes in the returns to education.",
   "",
   "Some argue unions mattered little. They point to trade instead.",
+  "",
+  "Union density fell from 35% to 11% between 1979 and 2019.",
 ].join("\n")
 
 const made: string[] = []
@@ -182,17 +184,20 @@ describe("a run", () => {
 })
 
 describe("a computation", () => {
-  const share = {
-    expression: "(before - after) / before * 100",
-    inputs: { before: 35, after: 11 },
-  }
+  /** The stored script of the share computation. */
+  const script = { expression: "(before - after) / before * 100", inputs: { before: 35, after: 11 } }
+  /** The share computation, each input naming the fragment that states it. */
+  const share = (fragment: string) => ({
+    expression: script.expression,
+    inputs: { before: { value: 35, fragment }, after: { value: 11, fragment } },
+  })
 
-  /** A run in which a reader quoted the paper and computed from it, and the claim text that cites the computation. */
+  /** A run in which a reader quoted the paper's numbers, so it can compute from them. */
   async function computing() {
     const lib = await project()
     const started = Evidence.protocol(lib.store, call("session-lead"), plan)
     const reader = () => call("session-reader", started.run)
-    const quoted = Evidence.quote(lib.store, reader(), { address: `${lib.short}:1/p1/s1` })
+    const quoted = Evidence.quote(lib.store, reader(), { address: `${lib.short}:1/p3/s1` })
     return { lib, started, reader, quoted }
   }
 
@@ -203,7 +208,7 @@ describe("a computation", () => {
 
   test("backs a claim at the computed tier, and replays to its recorded result", async () => {
     const run = await computing()
-    const computed = Evidence.compute(run.lib.store, run.reader(), { ...share, fragments: [run.quoted.fragment] })
+    const computed = Evidence.compute(run.lib.store, run.reader(), share(run.quoted.fragment))
     expect(computed).toMatchObject({ value: (24 / 35) * 100, result: `{"value":${(24 / 35) * 100}}` })
     const graph = run.lib.store.graph()
     const artifact = graph.heads(graph.lastSeq).find((entry) => entry.revision.objectId === computed.computation)!
@@ -232,6 +237,28 @@ describe("a computation", () => {
     ])
   })
 
+  test("needs each input stated by a fragment this session cut", async () => {
+    const run = await computing()
+    const elsewhere = Evidence.quote(run.lib.store, run.reader(), { address: `${run.lib.short}:1/p1/s1` })
+    const head = run.lib.store.head()
+    expect(() =>
+      Evidence.compute(run.lib.store, run.reader(), {
+        expression: "before - after",
+        inputs: {
+          before: { value: 35, fragment: run.quoted.fragment },
+          after: { value: 12, fragment: run.quoted.fragment },
+        },
+      }),
+    ).toThrow(`after is 12, which fragment ${run.quoted.fragment} does not state`)
+    expect(() => Evidence.compute(run.lib.store, run.reader(), share(elsewhere.fragment))).toThrow(
+      `before is 35, which fragment ${elsewhere.fragment} does not state`,
+    )
+    expect(() =>
+      Evidence.compute(run.lib.store, call("session-other", run.started.run), share(run.quoted.fragment)),
+    ).toThrow("never shown to this session")
+    expect(run.lib.store.head()).toEqual(head)
+  })
+
   test("that does not evaluate is refused, and evidence names exactly one fragment or computation", async () => {
     const run = await computing()
     const before = run.lib.store.head()
@@ -249,7 +276,7 @@ describe("a computation", () => {
 
   test("whose stored script was tampered with fails replay and drops the tier", async () => {
     const run = await computing()
-    const computed = Evidence.compute(run.lib.store, run.reader(), share)
+    const computed = Evidence.compute(run.lib.store, run.reader(), share(run.quoted.fragment))
     const claimed = Evidence.claim(run.lib.store, run.reader(), {
       text: "Union density fell by about two thirds.",
       evidence: [{ computation: computed.computation, role: "supports" }],
@@ -272,7 +299,7 @@ describe("a computation", () => {
     const reader = run.reader()
     // A forged run: the program's own script, but a result it never computed.
     const result = run.lib.store.admit(new TextEncoder().encode('{"value":99}')).digest
-    const script = run.lib.store.admit(new TextEncoder().encode(Canonical.json(share))).digest
+    const stored = run.lib.store.admit(new TextEncoder().encode(Canonical.json(script))).digest
     const artifact = Receipt.program(run.lib.store, reader, "artifact", {
       inputs: [],
       output: { digest: result, schema: Compute.RESULT, mediaType: "application/json" },
@@ -282,7 +309,7 @@ describe("a computation", () => {
       at: { started: "2026-11-15T10:00:00Z", ended: "2026-11-15T10:00:01Z" },
       step: {
         kind: "script",
-        script: { digest: script, schema: Compute.SCRIPT },
+        script: { digest: stored, schema: Compute.SCRIPT },
         engine: Compute.ENGINE,
         clock: "2026-11-15T10:00:00Z",
         seed: "none",
