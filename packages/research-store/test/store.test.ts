@@ -424,3 +424,79 @@ describe("readers and writers", () => {
     )
   })
 })
+
+describe("a handle that is behind", () => {
+  const claims = (prefix: string, count: number) =>
+    Array.from({ length: count }, (_, index) => claim(`${prefix}-${index}`, `Claim ${index} of ${prefix}.`))
+  const objects = (store: Store.Reader) => store.graph().entries.map((entry) => entry.revision.objectId)
+
+  test("reads only the commits made since its head, however large the record", () => {
+    const directory = project()
+    const a = open(directory)
+    const b = open(directory)
+    // 2,000 revisions in wide commits, so the record is large without thousands of flushed commits.
+    Array.from({ length: 20 }, (_, index) => a.commit({ revisions: claims(`bulk-${index}`, 100) }))
+    const first = a.graph().entries[0]
+    b.graph()
+    const kept = b.graph().entries[0]
+    Array.from({ length: 6 }, (_, index) =>
+      (index % 2 === 0 ? b : a).commit({ revisions: claims(`turn-${index}`, 2) }),
+    )
+    // A handle that read the whole record again would hold newly parsed revisions, not the ones it parsed first.
+    expect(a.graph().entries[0]).toBe(first)
+    expect(b.graph().entries[0]).toBe(kept)
+    expect(a.graph().entries).toHaveLength(2_012)
+    const fresh = open(directory)
+    expect(a.graph().entries).toEqual(fresh.graph().entries)
+    expect(b.graph().entries).toEqual(fresh.graph().entries)
+  })
+
+  test("reads the record again whole when its head was replaced", () => {
+    const directory = project()
+    const a = open(directory)
+    a.commit({ revisions: [claim("kept", "Kept.")] })
+    a.commit({ revisions: [claim("replaced", "Replaced.")] })
+    expect(objects(a)).toEqual(["kept", "replaced"])
+    // An earlier copy of the record is put back, and another writer commits past the head `a` cached.
+    const raw = new Database(Layout.of(directory).database)
+    raw.run("DELETE FROM commits WHERE seq >= 2")
+    raw.run("DELETE FROM revisions WHERE seq >= 2")
+    raw.close()
+    const b = open(directory)
+    b.commit({ revisions: [claim("other-1", "Other.")] })
+    b.commit({ revisions: [claim("other-2", "Other.")] })
+    expect(objects(a)).toEqual(["kept", "other-1", "other-2"])
+    expect(a.commit({ revisions: [claim("next", "Next.")] }).seq).toBe(4)
+    expect(a.verify().ok).toBe(true)
+  })
+
+  test("reads the record again whole when it was cut back behind its head", () => {
+    const directory = project()
+    const a = open(directory)
+    a.commit({ revisions: [claim("kept", "Kept.")] })
+    a.commit({ revisions: [claim("cut-1", "Cut.")] })
+    a.commit({ revisions: [claim("cut-2", "Cut.")] })
+    const raw = new Database(Layout.of(directory).database)
+    raw.run("DELETE FROM commits WHERE seq >= 2")
+    raw.run("DELETE FROM revisions WHERE seq >= 2")
+    raw.close()
+    expect(objects(a)).toEqual(["kept"])
+    expect(a.commit({ revisions: [claim("cut-1", "Again.")] }).seq).toBe(2)
+    expect(a.verify().ok).toBe(true)
+  })
+
+  test("refuses a stale revision on a record another writer moved, as a whole read would", () => {
+    const directory = project()
+    const a = open(directory)
+    const b = open(directory)
+    const v1 = claim("claim-1", "Union density fell.")
+    a.commit({ revisions: [v1] })
+    b.commit({ revisions: [claim("claim-1", "Corrected.", v1)] })
+    b.commit({ revisions: [claim("claim-2", "Unrelated.")] })
+    expect(refusal(() => a.commit({ revisions: [claim("claim-1", "A stale correction.", v1)] })).message).toContain(
+      "a revision's parent is its object's current head",
+    )
+    expect(a.commit({ revisions: [claim("claim-2", "Unrelated.")] })).toMatchObject({ seq: 3, replayed: true })
+    expect(a.commit({ revisions: [claim("claim-3", "New.")] }).seq).toBe(4)
+  })
+})
