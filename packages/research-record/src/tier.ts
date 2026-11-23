@@ -71,9 +71,29 @@ export function derive(input: {
         body.type === "adoption" && Ref.equals(body.claim, input.claim),
     )
   const supports = counting.filter((item) => item.body.role === "supports")
-  const computed = supports.some(
-    (item) => item.body.basis.kind === "computation" && input.facts.replayed(item.body.basis.run),
-  )
+  // A computation's inputs are numbers its author typed, so it counts only when it names the fragments they were read
+  // from and each of those passes the same checks a quote's fragments do.
+  const readFrom = (item: ResearchRecord.Revision<"evidence">) =>
+    item.body.basis.kind === "computation"
+      ? graph.get(item.body.basis.output, "artifact").body.inputs.flatMap((ref) => {
+          const revision = graph.get(ref)
+          return revision.kind === "fragment" ? [revision] : []
+        })
+      : []
+  const computed = supports.some((item) => {
+    if (item.body.basis.kind !== "computation" || !input.facts.replayed(item.body.basis.run)) return false
+    const fragments = readFrom(item)
+    return (
+      fragments.length > 0 &&
+      fragments.every((fragment) => {
+        const ref = ResearchRecord.refOf(fragment)
+        return (
+          input.facts.verified(ref) &&
+          (item.author.voice === "researcher" || input.facts.shown(ResearchRecord.refOf(item), ref))
+        )
+      })
+    )
+  })
   const quoted = supports.some(
     (item) =>
       item.body.basis.kind === "quote" &&
@@ -87,7 +107,7 @@ export function derive(input: {
     adoption?.ruling === "adopt" ? "adopted" : computed ? "computed" : quoted ? "quoted" : "unsupported"
 
   const cited = counting.flatMap((item) => (item.body.basis.kind === "quote" ? item.body.basis.cited : []))
-  const fragments = cited.map((item) => graph.get(item.fragment, "fragment"))
+  const fragments = [...cited.map((item) => graph.get(item.fragment, "fragment")), ...counting.flatMap(readFrom)]
   const representations = fragments.map((fragment) => graph.get(fragment.body.representation, "representation"))
   const copies = representations.map((representation) => graph.get(representation.body.copy, "copy"))
   const read = adoption?.ruling === "adopt" ? adoption.evidence : []

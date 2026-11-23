@@ -28,8 +28,13 @@
         "body": {
           "question": "How much of the rise in US wage inequality since 1979 does union decline explain?",
           "scope": {
-            "in": ["United States", "1979-2019"],
-            "out": ["public sector"]
+            "in": [
+              "United States",
+              "1979-2019"
+            ],
+            "out": [
+              "public sector"
+            ]
           },
           "subquestions": [
             {
@@ -41,7 +46,9 @@
               "text": "What share of the rise in inequality is attributed to it?"
             }
           ],
-          "criteria": ["peer-reviewed or official statistics"],
+          "criteria": [
+            "peer-reviewed or official statistics"
+          ],
           "plan": "Search OpenAlex, read full text where open, quote counter-evidence.",
           "effort": "standard",
           "budgets": {
@@ -156,7 +163,11 @@
             },
             "issued": {
               "value": {
-                "date-parts": [[2011]]
+                "date-parts": [
+                  [
+                    2011
+                  ]
+                ]
               },
               "origin": {
                 "by": "service",
@@ -362,7 +373,14 @@
           "after": " between 1979 and 2019.",
           "page": {
             "number": 4,
-            "boxes": [[72, 540.5, 523, 552]]
+            "boxes": [
+              [
+                72,
+                540.5,
+                523,
+                552
+              ]
+            ]
           }
         },
         "revisionId": "sha256:e47b80ee854c35a15b8d044c14eb2992077df06f6ee6dade7b14e2ddf20664ef"
@@ -591,6 +609,11 @@
           "inputs": [
             {
               "projectId": "project-1",
+              "objectId": "fragment-1",
+              "revisionId": "sha256:e47b80ee854c35a15b8d044c14eb2992077df06f6ee6dade7b14e2ddf20664ef"
+            },
+            {
+              "projectId": "project-1",
               "objectId": "source-1",
               "revisionId": "sha256:9e9bbef0bc418edeaf92238bc054bed53f84f102f959362dc58e9378d911fa8b"
             }
@@ -602,7 +625,7 @@
           },
           "transformation": "codemode.script"
         },
-        "revisionId": "sha256:0c9492af226048a1bc4c6f3121b4a5ff7490ed3e483eea597aa6b8eea402a70d"
+        "revisionId": "sha256:c8d1d58d30cb63b8963a6c4f5927aab2261192aefb501b699959088bffdc6b69"
       }
     },
     {
@@ -679,7 +702,7 @@
             {
               "projectId": "project-1",
               "objectId": "artifact-table",
-              "revisionId": "sha256:0c9492af226048a1bc4c6f3121b4a5ff7490ed3e483eea597aa6b8eea402a70d"
+              "revisionId": "sha256:c8d1d58d30cb63b8963a6c4f5927aab2261192aefb501b699959088bffdc6b69"
             },
             {
               "projectId": "project-1",
@@ -693,7 +716,7 @@
             "status": "ok"
           }
         },
-        "revisionId": "sha256:3f3a1c7463d6baca58bfe716fe69e0668bb086dad4938c7f0bc607cf70a74e98"
+        "revisionId": "sha256:47aeb7e78a9a3a3d113e05b1e9517cf103e1eb806c5e6dd0358e97728d5a4a6b"
       }
     },
     {
@@ -787,17 +810,17 @@
             "run": {
               "projectId": "project-1",
               "objectId": "receipt-script",
-              "revisionId": "sha256:3f3a1c7463d6baca58bfe716fe69e0668bb086dad4938c7f0bc607cf70a74e98"
+              "revisionId": "sha256:47aeb7e78a9a3a3d113e05b1e9517cf103e1eb806c5e6dd0358e97728d5a4a6b"
             },
             "output": {
               "projectId": "project-1",
               "objectId": "artifact-table",
-              "revisionId": "sha256:0c9492af226048a1bc4c6f3121b4a5ff7490ed3e483eea597aa6b8eea402a70d"
+              "revisionId": "sha256:c8d1d58d30cb63b8963a6c4f5927aab2261192aefb501b699959088bffdc6b69"
             }
           },
           "note": ""
         },
-        "revisionId": "sha256:6aeb949fe64b951cdc011813866d1b281505b23a4611125ca6af38e524138ee8"
+        "revisionId": "sha256:5b9f1c94455b329446ca1072ea92f8ce0bf2b1587373dfbfa6ed3a9eea1601dc"
       }
     },
     {
@@ -1244,11 +1267,11 @@
           "evidence": {
             "projectId": "project-1",
             "objectId": "evidence-2",
-            "revisionId": "sha256:6aeb949fe64b951cdc011813866d1b281505b23a4611125ca6af38e524138ee8"
+            "revisionId": "sha256:5b9f1c94455b329446ca1072ea92f8ce0bf2b1587373dfbfa6ed3a9eea1601dc"
           },
           "grounds": "other"
         },
-        "revisionId": "sha256:1412296ed7f1d71e6ae767f393098caa4a956dc87b71b224078e1fa8cde95634"
+        "revisionId": "sha256:cb0dc0a476d2e32d036e602b1731db0971268f97f8dd916ebb9be8cfd0483a79"
       }
     },
     {
@@ -1354,12 +1377,12 @@
             {
               "projectId": "project-1",
               "objectId": "evidence-2",
-              "revisionId": "sha256:6aeb949fe64b951cdc011813866d1b281505b23a4611125ca6af38e524138ee8"
+              "revisionId": "sha256:5b9f1c94455b329446ca1072ea92f8ce0bf2b1587373dfbfa6ed3a9eea1601dc"
             }
           ],
           "ruling": "adopt"
         },
-        "revisionId": "sha256:118ee5084ba2d75c4151ab5ec874941e1dd8cf6bc34fba3ee1dcc97b945f15f5"
+        "revisionId": "sha256:501cdd923f4ef9daaaf618da270394adb8d134e962994f36458ec2845cc54dab"
       }
     },
     {
