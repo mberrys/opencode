@@ -85,6 +85,33 @@ export function commit(
   return { receipt: ResearchRecord.refOf(receipt), seq: committed.seq, replayed: committed.replayed }
 }
 
+/**
+ * Commits a researcher's command, such as a ruling typed at a terminal, with the receipt that names the command and
+ * stores its input. The revisions it wrote are the researcher's own; the receipt is the program's account of them.
+ */
+export function command(
+  store: Store.Store,
+  actor: Actor,
+  started: string,
+  input: { readonly command: string; readonly input: unknown },
+  revisions: readonly ResearchRecord.Revision[],
+) {
+  const stored = store.admit(new TextEncoder().encode(Canonical.json(input.input))).digest
+  const receipt = program(store, actor, "receipt", {
+    at: { started, ended: now(actor) },
+    step: { kind: "command", command: input.command, input: { digest: stored, schema: `${input.command}-input@1` } },
+    written: revisions.map(ResearchRecord.refOf).toSorted(Ref.compare),
+    skills: [],
+    lenses: [],
+    outcome: { status: "ok" },
+  })
+  const committed = store.commit({
+    ...(actor.key === undefined ? {} : { key: actor.key }),
+    revisions: [...revisions, receipt],
+  })
+  return { receipt: ResearchRecord.refOf(receipt), seq: committed.seq }
+}
+
 export function now(actor: Actor) {
   return (actor.now?.() ?? new Date()).toISOString()
 }

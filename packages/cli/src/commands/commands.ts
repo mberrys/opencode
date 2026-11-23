@@ -28,8 +28,12 @@ export const Server = GlobalFlag.Setting("server")({
 const ServerFlags = [Standalone, Server] as const
 
 const ResearchDirectory = Flag.String("directory").pipe(
-  Flag.withDescription("The project whose .research record to read; defaults to the current directory"),
+  Flag.withDescription("The project whose .research record to use; defaults to the current directory"),
   Flag.optional,
+)
+
+const ResearchClaim = Argument.String("claim").pipe(
+  Argument.withDescription("A claim id, such as claim-0123456789abcdef"),
 )
 
 declare const OPENCODE_CLI_NAME: string | undefined
@@ -154,6 +158,30 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
           params: {
             directory: ResearchDirectory,
             id: Argument.String("id").pipe(Argument.withDescription("An object id, such as claim-0123456789abcdef")),
+          },
+        }),
+        Spec.make("add", {
+          description: "Add a file or URL to the library as the researcher; a title is confirmed at the terminal",
+          params: {
+            directory: ResearchDirectory,
+            target: Argument.String("target").pipe(Argument.withDescription("A file path or an http(s) URL")),
+            title: Flag.String("title").pipe(Flag.withDescription("Your title for the work"), Flag.optional),
+          },
+        }),
+        Spec.make("adopt", {
+          description: "Adopt a claim's newest revision, confirmed at the terminal so it counts toward its tier",
+          params: {
+            directory: ResearchDirectory,
+            claim: ResearchClaim,
+            reason: Flag.String("reason").pipe(Flag.withDescription("Why you adopt it"), Flag.optional),
+          },
+        }),
+        Spec.make("reject", {
+          description: "Reject a claim's newest revision, confirmed at the terminal",
+          params: {
+            directory: ResearchDirectory,
+            claim: ResearchClaim,
+            reason: Flag.String("reason").pipe(Flag.withDescription("Why you reject it"), Flag.optional),
           },
         }),
         Spec.make("run", {

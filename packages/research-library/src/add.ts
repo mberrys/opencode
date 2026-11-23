@@ -245,14 +245,17 @@ function title(store: Store.Store, options: Options, source: ResearchRecord.Revi
         attestation: options.attestation ?? { level: "unattested", surface: TOOL },
       }
     : { ...body, reason: "the agent gave the title when adding the work" }
+  const objectId = decision
+    ? ResearchRecord.decisionObjectId(content as ResearchRecord.Body<"decision">)
+    : Receipt.objectId("judgment")
+  // A decision's object id is derived from its subject, so a second title for the same source revises the first.
+  const previous = decision ? store.latest(objectId) : undefined
   return ResearchRecord.create({
     projectId: store.projectId,
     kind: decision ? "decision" : "judgment",
     schema: decision ? "decision@1" : "judgment@1",
-    objectId: decision
-      ? ResearchRecord.decisionObjectId(content as ResearchRecord.Body<"decision">)
-      : Receipt.objectId("judgment"),
-    parent: "none",
+    objectId,
+    parent: previous === undefined ? "none" : ResearchRecord.refOf(previous),
     author: initiator,
     context: options.context,
     body: content,
